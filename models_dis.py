@@ -89,7 +89,7 @@ class MultiVAE(nn.Module):
 
             # p-network
             z_k = F.normalize(z_k)
-            logits_k = torch.mm(z_k, self.items.t()) / self.tau
+            logits_k = torch.mm(z_k, items.t()) / self.tau
             probs_k = torch.exp(logits_k)
             probs_k = probs_k * cates_k
             probs = (probs_k if (probs is None) else (probs + probs_k))
