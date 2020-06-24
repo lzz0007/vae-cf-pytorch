@@ -35,7 +35,7 @@ class MultiDAE(nn.Module):
 
         for i, layer in enumerate(self.layers):
             h = layer(h)
-            if i != len(self.weights) - 1:
+            if i != len(self.layers) - 1:
                 h = F.tanh(h)
         return h
 
@@ -69,10 +69,11 @@ class MultiVAE(nn.Module):
             assert q_dims[-1] == p_dims[0], "Latent dimension for p- and q- network mismatches."
             self.q_dims = q_dims
         else:
-            self.q_dims = p_dims[::-1]
+            self.q_dims = p_dims[::-1] # make the copy of the list in reverse order
 
         # Last dimension of q- network is for mean and variance
-        temp_q_dims = self.q_dims[:-1] + [self.q_dims[-1] * 2]
+        # :-1 everything except last one. -1 last one
+        temp_q_dims = self.q_dims[:-1] + [self.q_dims[-1] * 2] # same as q_dims but last element *2
         self.q_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
             d_in, d_out in zip(temp_q_dims[:-1], temp_q_dims[1:])])
         self.p_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
@@ -93,8 +94,8 @@ class MultiVAE(nn.Module):
         for i, layer in enumerate(self.q_layers):
             h = layer(h)
             if i != len(self.q_layers) - 1:
-                h = F.tanh(h)
-            else:
+                h = torch.tanh(h)
+            else: # for last layer
                 mu = h[:, :self.q_dims[-1]]
                 logvar = h[:, self.q_dims[-1]:]
         return mu, logvar
@@ -112,7 +113,7 @@ class MultiVAE(nn.Module):
         for i, layer in enumerate(self.p_layers):
             h = layer(h)
             if i != len(self.p_layers) - 1:
-                h = F.tanh(h)
+                h = torch.tanh(h)
         return h
 
     def init_weights(self):

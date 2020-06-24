@@ -12,25 +12,25 @@ import data
 import metric
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
-parser.add_argument('--data', type=str, default='ml-20m',
+parser.add_argument('--data', type=str, default='ml-1m',
                     help='Movielens-20m dataset location')
-parser.add_argument('--lr', type=float, default=1e-4,
+parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
-parser.add_argument('--wd', type=float, default=0.00,
+parser.add_argument('--wd', type=float, default=0.001,
                     help='weight decay coefficient')
 parser.add_argument('--batch_size', type=int, default=500,
                     help='batch size')
-parser.add_argument('--epochs', type=int, default=200,
+parser.add_argument('--epochs', type=int, default=500,
                     help='upper epoch limit')
 parser.add_argument('--total_anneal_steps', type=int, default=200000,
                     help='the total number of gradient updates for annealing')
 parser.add_argument('--anneal_cap', type=float, default=0.2,
                     help='largest annealing parameter')
-parser.add_argument('--seed', type=int, default=1111,
+parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=100, metavar='N',
+parser.add_argument('--log-interval', type=int, default=500, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
@@ -47,7 +47,7 @@ device = torch.device("cuda" if args.cuda else "cpu")
 ###############################################################################
 # Load data
 ###############################################################################
-
+# args.data = 'ml-latest-small'
 loader = data.DataLoader(args.data)
 
 n_items = loader.load_n_items()
@@ -58,11 +58,13 @@ test_data_tr, test_data_te = loader.load_data('test')
 N = train_data.shape[0]
 idxlist = list(range(N))
 
+num_batches = int(np.ceil(float(N) / args.batch_size))
+total_anneal_steps = 5 * num_batches
 ###############################################################################
 # Build the model
 ###############################################################################
 
-p_dims = [200, 600, n_items]
+p_dims = [100, 100, n_items]
 model = models.MultiVAE(p_dims).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.wd)
@@ -75,6 +77,7 @@ criterion = models.loss_function
 # TensorboardX Writer
 
 writer = SummaryWriter()
+
 
 def sparse2torch_sparse(data):
     """
@@ -91,6 +94,7 @@ def sparse2torch_sparse(data):
     values = np.array([row2val[r] for r in coo_data.row])
     t = torch.sparse.FloatTensor(indices, torch.from_numpy(values).float(), [samples, features])
     return t
+
 
 def naive_sparse2tensor(data):
     return torch.FloatTensor(data.toarray())
@@ -110,9 +114,9 @@ def train():
         data = train_data[idxlist[start_idx:end_idx]]
         data = naive_sparse2tensor(data).to(device)
 
-        if args.total_anneal_steps > 0:
+        if total_anneal_steps > 0:
             anneal = min(args.anneal_cap, 
-                            1. * update_count / args.total_anneal_steps)
+                            1. * update_count / total_anneal_steps)
         else:
             anneal = args.anneal_cap
 
@@ -161,9 +165,9 @@ def evaluate(data_tr, data_te):
 
             data_tensor = naive_sparse2tensor(data).to(device)
 
-            if args.total_anneal_steps > 0:
+            if total_anneal_steps > 0:
                 anneal = min(args.anneal_cap, 
-                               1. * update_count / args.total_anneal_steps)
+                               1. * update_count / total_anneal_steps)
             else:
                 anneal = args.anneal_cap
 
@@ -199,7 +203,9 @@ update_count = 0
 try:
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
+        # train
         train()
+        # evaluate
         val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
@@ -231,6 +237,6 @@ with open(args.save, 'rb') as f:
 # Run on test data.
 test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
 print('=' * 89)
-print('| End of training | test loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | '
-        'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
+print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
+        'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
 print('=' * 89)
