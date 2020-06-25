@@ -39,10 +39,10 @@ class MultiVAE(nn.Module):
         self.kfac = kfac
         num_items = self.q_dims[0]
         self.cores = nn.Parameter(torch.empty(self.kfac, dfac), requires_grad=True)
-        # self.items = nn.Parameter(torch.empty(num_items, dfac), requires_grad=True)
+        self.items = nn.Parameter(torch.empty(num_items, dfac), requires_grad=True)
         self.cores.data = init_kmeans
         # nn.init.xavier_normal_(self.cores.data)
-        # nn.init.xavier_normal_(self.items.data)
+        nn.init.xavier_normal_(self.items.data)
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
         self.save_emb = False
@@ -60,16 +60,17 @@ class MultiVAE(nn.Module):
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        # items = F.normalize(self.items)
+        items = F.normalize(self.items)
         # cates_logits = torch.mm(items, cores.t()) / self.tau
 
         title = self.embeddings(self.title)
         title = self.drop_title(title)
 
         out_pack, (ht, ct) = self.lstm(title)
-        # items_concat = torch.cat((self.items, ht[-1]), 1)
-        # items_final = self.linear(items_concat)
-        items_final = F.normalize(ht[-1])
+        items_concat = torch.cat((self.items, ht[-1]), 1)
+        items_final = self.linear(items_concat)
+        items_final = F.tanh(items_final)
+        items_final = F.normalize(items_final)
 
         cates_logits = torch.mm(items_final, cores.t()) / self.tau
 

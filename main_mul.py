@@ -106,7 +106,7 @@ titles = np.array(titles)
 embedding_dim = 100
 hidden_dim = 100
 
-kmeans = KMeans(n_clusters=args.kfac).fit(titles)
+kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(titles)
 init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
 titles = torch.from_numpy(titles).to(device)
 ###############################################################################
