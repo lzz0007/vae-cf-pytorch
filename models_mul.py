@@ -15,7 +15,7 @@ class MultiVAE(nn.Module):
     """
 
     def __init__(self, p_dims, tau, std, kfac,
-                 vocab_size, embedding_dim, hidden_dim, title_data,
+                 vocab_size, embedding_dim, hidden_dim, title_data, init_kmeans,
                  dropout, nogb=False, q_dims=None):
         super(MultiVAE, self).__init__()
 
@@ -39,16 +39,15 @@ class MultiVAE(nn.Module):
         self.kfac = kfac
         num_items = self.q_dims[0]
         self.cores = nn.Parameter(torch.empty(self.kfac, dfac), requires_grad=True)
-        self.items = nn.Parameter(torch.empty(num_items, dfac), requires_grad=True)
-        nn.init.xavier_normal_(self.cores.data)
-        nn.init.xavier_normal_(self.items.data)
+        # self.items = nn.Parameter(torch.empty(num_items, dfac), requires_grad=True)
+        self.cores.data = init_kmeans
+        # nn.init.xavier_normal_(self.cores.data)
+        # nn.init.xavier_normal_(self.items.data)
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
         self.save_emb = False
         self.nogb = nogb
 
-        # self.title = nn.Parameter(torch.empty(num_items, vocab_size, dtype=torch.float), requires_grad=False)
-        # self.title.data = torch.from_numpy(title_data)
         self.title = title_data
         self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
@@ -68,9 +67,9 @@ class MultiVAE(nn.Module):
         title = self.drop_title(title)
 
         out_pack, (ht, ct) = self.lstm(title)
-        items_concat = torch.cat((self.items, ht[-1]), 1)
-        items_final = self.linear(items_concat)
-        items_final = F.normalize(items_final)
+        # items_concat = torch.cat((self.items, ht[-1]), 1)
+        # items_final = self.linear(items_concat)
+        items_final = F.normalize(ht[-1])
 
         cates_logits = torch.mm(items_final, cores.t()) / self.tau
 

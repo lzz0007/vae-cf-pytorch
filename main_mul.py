@@ -15,6 +15,7 @@ import torch.nn.functional as F
 import pandas as pd
 import os
 import pickle
+from sklearn.cluster import KMeans
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='amazon',
@@ -100,10 +101,13 @@ titles = []
 for i in range(len(item_title)):
     titles.append(item_title['encoded'].iloc[i][0])
 titles = np.array(titles)
-titles = torch.from_numpy(titles).to(device)
+
 # define parameters for titles
 embedding_dim = 100
 hidden_dim = 100
+
+init_kmeans = KMeans(n_clusters=args.kfac).fit(titles)
+titles = torch.from_numpy(titles).to(device)
 ###############################################################################
 # Build the model
 ###############################################################################
@@ -112,7 +116,7 @@ p_dims = [args.dfac, args.dfac, n_items]
 
 model = models_mul.MultiVAE(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
                             vocab_size=len(vocab2index), embedding_dim=embedding_dim, hidden_dim=hidden_dim,
-                            title_data=titles,
+                            title_data=titles, init_kmeans=init_kmeans,
                             dropout=args.keep, nogb=args.nogb, q_dims=None).to(device)
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 criterion = models_mul.loss_function
