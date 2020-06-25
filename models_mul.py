@@ -49,7 +49,7 @@ class MultiVAE(nn.Module):
 
         # self.title = nn.Parameter(torch.empty(num_items, vocab_size, dtype=torch.float), requires_grad=False)
         # self.title.data = torch.from_numpy(title_data)
-        self.title = torch.from_numpy(title_data)
+        self.title = title_data
         self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
         self.linear = nn.Linear(dfac+hidden_dim, dfac)

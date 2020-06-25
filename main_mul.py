@@ -100,7 +100,7 @@ titles = []
 for i in range(len(item_title)):
     titles.append(item_title['encoded'].iloc[i][0])
 titles = np.array(titles)
-# titles = torch.from_numpy(titles).to(device)
+titles = torch.from_numpy(titles).to(device)
 # define parameters for titles
 embedding_dim = 100
 hidden_dim = 100
