@@ -112,10 +112,23 @@ def numerize(tp, profile2id, show2id):
 
 if __name__ == '__main__':
 
-    print("Load and Preprocess Movielens-20m dataset")
+    which_dataset_to_use = 4  # in {0, 1, 2, 3}, see below.
+    dataset = {0: 'ml-latest-small', 1: 'ml-1m', 2: 'ml-20m', 3: 'netflix', 4: 'amazon'}
+
+    raw_data = pd.read_csv('amazon/ratings.csv')
+
+    n_heldout_users = (50, 500, 10000, 40000, 900)[which_dataset_to_use]
+    DATA_DIR = '%s/' % dataset[which_dataset_to_use]
+    print("Load and Preprocess %s dataset" % dataset[which_dataset_to_use])
+
     # Load Data
-    DATA_DIR = 'ml-20m/'
-    raw_data = pd.read_csv(os.path.join(DATA_DIR, 'ratings.csv'), header=0)
+    if 'ml-1m' in DATA_DIR:
+        raw_data = pd.read_csv(os.path.join(DATA_DIR, 'ratings.dat'),
+                               header=None, delimiter='::',
+                               names=['userId', 'movieId', 'rating', 'timestamp'])
+    else:
+        raw_data = pd.read_csv(os.path.join(DATA_DIR, 'ratings.csv'), header=0)
+
     raw_data = raw_data[raw_data['rating'] > 3.5]
 
     # Filter Data
@@ -128,7 +141,7 @@ if __name__ == '__main__':
     unique_uid = unique_uid[idx_perm]
 
     n_users = unique_uid.size
-    n_heldout_users = 10000
+    # n_heldout_users = 10000
 
     # Split Train/Validation/Test User Indices
     tr_users = unique_uid[:(n_users - n_heldout_users * 2)]

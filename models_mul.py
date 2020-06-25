@@ -61,15 +61,16 @@ class MultiVAE(nn.Module):
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        items = F.normalize(self.items)
+        # items = F.normalize(self.items)
         # cates_logits = torch.mm(items, cores.t()) / self.tau
 
         title = self.embeddings(self.title)
         title = self.drop_title(title)
 
         out_pack, (ht, ct) = self.lstm(title)
-        items_concat = torch.cat((items, ht[-1]), 1)
+        items_concat = torch.cat((self.items, ht[-1]), 1)
         items_final = self.linear(items_concat)
+        items_final = F.normalize(items_final)
 
         cates_logits = torch.mm(items_final, cores.t()) / self.tau
 
