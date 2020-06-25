@@ -14,25 +14,25 @@ import metric
 import torch.nn.functional as F
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
-parser.add_argument('--data', type=str, default='ml-1m',
+parser.add_argument('--data', type=str, default='amazon',
                     help='Movielens-20m dataset location')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
 parser.add_argument('--wd', type=float, default=0.001,
                     help='weight decay coefficient')
-parser.add_argument('--batch_size', type=int, default=500,
+parser.add_argument('--batch_size', type=int, default=100,
                     help='batch size')
-parser.add_argument('--epochs', type=int, default=100,
+parser.add_argument('--epochs', type=int, default=1,
                     help='upper epoch limit')
 # parser.add_argument('--total_anneal_steps', type=int, default=200000,
 #                     help='the total number of gradient updates for annealing')
 parser.add_argument('--anneal_cap', type=float, default=0.2,
                     help='largest annealing parameter')
-parser.add_argument('--seed', type=int, default=12345,
+parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=500, metavar='N',
+parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
