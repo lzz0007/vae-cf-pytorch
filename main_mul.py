@@ -108,7 +108,7 @@ hidden_dim = 100
 
 kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(titles)
 init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
-titles = torch.from_numpy(titles).float().to(device)
+titles = torch.from_numpy(titles).to(device)
 ###############################################################################
 # Build the model
 ###############################################################################
