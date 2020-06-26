@@ -80,7 +80,7 @@ def extract_feature(img_path, model):
     tensor2pil = transforms.ToPILImage()
 
     # Read the image from file. Assuming it is in the same directory.
-    pil_image = Image.open(f)
+    pil_image = Image.open(f).convert('RGB')
     rgb_image = pil2tensor(pil_image)
 
     with torch.no_grad():
