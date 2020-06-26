@@ -62,7 +62,7 @@ class MultiVAE(nn.Module):
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        items = F.normalize(self.items)
+        items_final = F.normalize(self.items)
         # cates_logits = torch.mm(items, cores.t()) / self.tau
 
         # title = self.embeddings(self.title)
@@ -75,7 +75,7 @@ class MultiVAE(nn.Module):
         # items_final = F.tanh(items_final)
         # items_final = F.normalize(title)
 
-        cates_logits = torch.mm(items, cores.t()) / self.tau
+        cates_logits = torch.mm(items_final, cores.t()) / self.tau
 
         if self.nogb:
             cates = F.softmax(cates_logits, dim=1)
