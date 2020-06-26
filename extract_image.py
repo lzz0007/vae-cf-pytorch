@@ -72,15 +72,13 @@ image_all = image_all.append(image_software, ignore_index=True)
 images = image_all.dropna(subset=['image'])
 
 
-def extract_feature(img_path, model):
-    with urllib.request.urlopen(img_path) as url:
-        f = io.BytesIO(url.read())
+def extract_feature(img, model):
     # pytorch provides a function to convert PIL images to tensors.
     pil2tensor = transforms.ToTensor()
     tensor2pil = transforms.ToPILImage()
 
     # Read the image from file. Assuming it is in the same directory.
-    pil_image = Image.open(f).convert('RGB')
+    pil_image = Image.open(img).convert('RGB')
     rgb_image = pil2tensor(pil_image)
 
     with torch.no_grad():
@@ -101,14 +99,27 @@ model_ft = models.resnet18(pretrained=True)
 model = torch.nn.Sequential(*(list(model.children())[:-1])).to(device)
 
 resnet_feature_list = []
+items = []
+images.columns
 for i in tqdm(range(images.shape[0])):
-    img_path = images.iloc[i, 1][0]
-    feature = extract_feature(img_path, model)
-    resnet_feature_list.append(feature.cpu().squeeze().detach().numpy())
+    feature = None
+    for j in range(len(images.iloc[i, 1])):
+        img_path = images.iloc[i, 1][0]
+        try:
+            with urllib.request.urlopen(img_path) as url:
+                f = io.BytesIO(url.read())
+            feature = extract_feature(img_path, model)
+            resnet_feature_list.append(feature.cpu().squeeze().detach().numpy())
+            items.append(images.iloc[i, 0])
+            break
+        except:
+            continue
+    if feature is None:
+        print('cannot find ', i)
 
 resnet_feature_list = np.array(resnet_feature_list)
 print(resnet_feature_list.shape)
-items = images['asin'].to_list()
+# items = images['asin'].to_list()
 res = {'items': items, 'img_features': resnet_feature_list}
 with open('amazon/images.pickle', 'wb') as f:
     pickle.dump(res, f, protocol=pickle.HIGHEST_PROTOCOL)
