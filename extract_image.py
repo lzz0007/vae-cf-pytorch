@@ -108,11 +108,12 @@ for i in tqdm(range(images.shape[0])):
         try:
             with urllib.request.urlopen(img_path) as url:
                 f = io.BytesIO(url.read())
-            feature = extract_feature(img_path, model)
+            feature = extract_feature(f, model)
             resnet_feature_list.append(feature.cpu().squeeze().detach().numpy())
             items.append(images.iloc[i, 0])
             break
-        except:
+        except Exception as e:
+            print(e)
             continue
     if feature is None:
         print('cannot find ', i)
