@@ -49,9 +49,10 @@ class MultiVAE(nn.Module):
         self.nogb = nogb
 
         self.title = title_data
-        self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
+        # self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         # self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
         # self.linear = nn.Linear(dfac+hidden_dim, dfac)
+        self.linear = nn.Linear(embedding_dim, 100)
         self.drop_title = nn.Dropout(dropout)
 
         self.drop = nn.Dropout(dropout)
@@ -63,8 +64,9 @@ class MultiVAE(nn.Module):
         # items = F.normalize(self.items)
         # cates_logits = torch.mm(items, cores.t()) / self.tau
 
-        title = self.embeddings(self.title)
-        title = self.drop_title(title)
+        # title = self.embeddings(self.title)
+        title = self.linear(self.title)
+        # title = self.drop_title(title)
 
         # out_pack, (ht, ct) = self.lstm(title)
         # items_concat = torch.cat((self.items, ht[-1]), 1)
