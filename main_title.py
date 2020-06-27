@@ -192,12 +192,8 @@ def train():
 
             start_time = time.time()
             train_loss = 0.0
+    return embeddings
 
-    # calulate clustering accuracy
-    kmeans = KMeans(n_clusters=3, n_init=20, random_state=args.seed)
-    predicted = kmeans.fit_predict(np.asarray(embeddings))
-    cm = clustering_metrics(category_id, predicted)
-    new_predict = cm.evaluationClusterModelFromLabel()
 
 
 def evaluate(data_tr, data_te):
@@ -257,14 +253,16 @@ update_count = 0
 try:
     epoch_start_time = time.time()
     train_data_array = train_data.toarray()
-    kmeans = KMeans(n_clusters=3, n_init=20, random_state=args.seed)
+    kmeans = KMeans(n_clusters=3, n_init=10, random_state=args.seed)
     predicted = kmeans.fit_predict(train_data_array)
     cm = clustering_metrics(category_id, predicted)
     new_predict = cm.evaluationClusterModelFromLabel()
+
+    # use
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
-        train()
+        embeddings = train()
         # evaluate
         # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         # print('-' * 89)
@@ -285,6 +283,16 @@ try:
         #     with open(args.save, 'wb') as f:
         #         torch.save(model, f)
         #     best_n100 = n100
+
+        if epoch % 10 == 0:
+            # calulate clustering accuracy
+            kmeans = KMeans(n_clusters=3, n_init=10, random_state=args.seed)
+            predicted = kmeans.fit_predict(np.asarray(embeddings))
+            cm = clustering_metrics(category_id, predicted)
+            new_predict = cm.evaluationClusterModelFromLabel()
+        with open('embeddings.pt', 'wb') as f:
+            torch.save(embeddings, f)
+
 
 except KeyboardInterrupt:
     print('-' * 89)
