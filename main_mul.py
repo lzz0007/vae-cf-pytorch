@@ -106,7 +106,8 @@ embeddings = torch.load('embeddings.pt')
 
 kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(embeddings)
 init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
-titles = torch.from_numpy(embeddings).to(device)
+
+titles = torch.from_numpy(embeddings).float().to(device)
 
 num_batches = int(np.ceil(float(N) / args.batch_size))
 total_anneal_steps = 5 * num_batches

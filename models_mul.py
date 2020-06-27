@@ -40,19 +40,21 @@ class MultiVAE(nn.Module):
         num_items = self.q_dims[0]
         self.cores = nn.Parameter(torch.empty(self.kfac, dfac), requires_grad=True)
         self.items = nn.Parameter(torch.empty(num_items, dfac), requires_grad=True)
-        # self.cores.data = init_kmeans
         nn.init.xavier_normal_(self.cores.data)
         nn.init.xavier_normal_(self.items.data)
+        # self.cores.data = init_kmeans
+        # self.items.data = init_kmeans
 
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
         self.save_emb = False
         self.nogb = nogb
 
-        self.title = title_data
-        self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
-        self.linear = nn.Linear(hidden_dim, dfac)
+        self.title = nn.Parameter(torch.empty(num_items, vocab_size))
+        self.title.data = title_data
+        # self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
+        # self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+        self.linear = nn.Linear(dfac+vocab_size, dfac)
         # self.linear = nn.Linear(embedding_dim, 100)
         self.drop_title = nn.Dropout(dropout)
 
@@ -62,20 +64,21 @@ class MultiVAE(nn.Module):
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        items = F.normalize(self.items)
-        cates_logits_1 = torch.mm(items, cores.t()) / self.tau
+        # items = F.normalize(self.items)
+        # cates_logits_1 = torch.mm(items, cores.t()) / self.tau
 
-        title = self.embeddings(self.title)
-        title = self.drop_title(title)
-        out_pack, (ht, ct) = self.lstm(title)
-        title = self.linear(ht[-1])
-        # items_concat = torch.cat((self.items, ht[-1]), 1)
-        # items_final = self.linear(items_concat)
-        # items_final = F.tanh(items_final)
-        title = F.normalize(title)
-        cates_logits_2 = torch.mm(title, cores.t()) / self.tau
-
-        cates_logits = (cates_logits_1+cates_logits_2)/2
+        # title = self.embeddings(self.title)
+        # title = self.drop_title(title)
+        # out_pack, (ht, ct) = self.lstm(title)
+        # title = self.linear(ht[-1])
+        items_concat = torch.cat((self.items, self.title), 1)
+        items_final = self.linear(items_concat)
+        items_final = torch.tanh(items_final)
+        items_final = F.normalize(items_final)
+        # title = F.normalize(title)
+        # cates_logits_2 = torch.mm(title, cores.t()) / self.tau
+        # cates_logits = (cates_logits_1+cates_logits_2)/2
+        cates_logits = torch.mm(items_final, cores.t()) / self.tau
 
         if self.nogb:
             cates = F.softmax(cates_logits, dim=1)
@@ -106,7 +109,7 @@ class MultiVAE(nn.Module):
             # p-network
             z_k = F.normalize(z_k)
             # logits_k = torch.mm(z_k, self.items.t()) / self.tau
-            logits_k = torch.mm(z_k, items.t()) / self.tau
+            logits_k = torch.mm(z_k, items_final.t()) / self.tau
             probs_k = torch.exp(logits_k)
             probs_k = probs_k * cates_k
             probs = (probs_k if (probs is None) else (probs + probs_k))
