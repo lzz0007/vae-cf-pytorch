@@ -195,7 +195,6 @@ def train():
 
     # calulate clustering accuracy
     kmeans = KMeans(n_clusters=3, n_init=20, random_state=args.seed)
-    tmp = np.asarray(embeddings)
     predicted = kmeans.fit_predict(np.asarray(embeddings))
     cm = clustering_metrics(category_id, predicted)
     new_predict = cm.evaluationClusterModelFromLabel()
