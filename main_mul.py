@@ -52,9 +52,9 @@ parser.add_argument('--dfac', type=int, default=100,
                     help='Dimension of each facet.')
 parser.add_argument('--nogb', action='store_true', default=False,
                     help='Disable Gumbel-Softmax sampling.')
-args = parser.parse_args()
-# args = parser.parse_known_args()
-# args = args[0]
+# args = parser.parse_args()
+args = parser.parse_known_args()
+args = args[0]
 
 # Set the random seed manually for reproductibility.
 torch.manual_seed(args.seed)
@@ -84,31 +84,36 @@ total_anneal_steps = 5 * num_batches
 ###############################################################################
 # load item title
 ###############################################################################
-with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
-    dataset = pickle.load(f)
+# with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
+#     dataset = pickle.load(f)
+#
+# item_title = dataset['data']
+# vocab2index = dataset['vocab2index']
+# cat2index = dataset['cat2index']
+# with open(os.path.join(args.data, 'pro_sg/unique_sid.txt'), "r") as f:
+#     unique_sid = []
+#     for l in f:
+#         unique_sid.append(l.rstrip("\n"))
+#
+# # filter items
+# item_title = item_title[item_title['asin'].isin(unique_sid)]
+# titles = []
+# for i in range(len(item_title)):
+#     titles.append(item_title['encoded'].iloc[i][0])
+# titles = np.array(titles)
 
-item_title = dataset['data']
-vocab2index = dataset['vocab2index']
-cat2index = dataset['cat2index']
-with open(os.path.join(args.data, 'pro_sg/unique_sid.txt'), "r") as f:
-    unique_sid = []
-    for l in f:
-        unique_sid.append(l.rstrip("\n"))
+embeddings = torch.load('embeddings.pt')
 
-# filter items
-item_title = item_title[item_title['asin'].isin(unique_sid)]
-titles = []
-for i in range(len(item_title)):
-    titles.append(item_title['encoded'].iloc[i][0])
-titles = np.array(titles)
+kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(embeddings)
+init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
+titles = torch.from_numpy(embeddings).to(device)
+
+num_batches = int(np.ceil(float(N) / args.batch_size))
+total_anneal_steps = 5 * num_batches
 
 # define parameters for titles
 embedding_dim = 100
 hidden_dim = 100
-
-kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(titles)
-init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
-titles = torch.from_numpy(titles).to(device)
 ###############################################################################
 # Build the model
 ###############################################################################
@@ -116,7 +121,7 @@ titles = torch.from_numpy(titles).to(device)
 p_dims = [args.dfac, args.dfac, n_items]
 
 model = models_mul.MultiVAE(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
-                            vocab_size=len(vocab2index), embedding_dim=embedding_dim, hidden_dim=hidden_dim,
+                            vocab_size=embeddings.shape[1], embedding_dim=embedding_dim, hidden_dim=hidden_dim,
                             title_data=titles, init_kmeans=init_kmeans,
                             dropout=args.keep, nogb=args.nogb, q_dims=None).to(device)
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
@@ -263,6 +268,9 @@ update_count = 0
 
 # At any point you can hit Ctrl + C to break out of training early.
 try:
+    # train for items
+
+    # disentangled
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
