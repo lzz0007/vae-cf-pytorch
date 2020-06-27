@@ -255,13 +255,14 @@ update_count = 0
 
 # At any point you can hit Ctrl + C to break out of training early.
 try:
+    epoch_start_time = time.time()
+    train_data_array = train_data.toarray()
+    kmeans = KMeans(n_clusters=3, n_init=20, random_state=args.seed)
+    predicted = kmeans.fit_predict(train_data_array)
+    cm = clustering_metrics(category_id, predicted)
+    new_predict = cm.evaluationClusterModelFromLabel()
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
-        train_data_array = train_data.toarray()
-        kmeans = KMeans(n_clusters=3, n_init=20, random_state=args.seed)
-        predicted = kmeans.fit_predict(train_data_array)
-        cm = clustering_metrics(category_id, predicted)
-        new_predict = cm.evaluationClusterModelFromLabel()
         # train
         train()
         # evaluate
