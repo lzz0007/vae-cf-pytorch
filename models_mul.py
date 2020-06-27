@@ -73,7 +73,7 @@ class MultiVAE(nn.Module):
         # title = self.linear(ht[-1])
         items_concat = torch.cat((self.items, self.title), 1)
         items_final = self.linear(items_concat)
-        items_final = torch.tanh(items_final)
+        # items_final = torch.tanh(items_final)
         items_final = F.normalize(items_final)
         # title = F.normalize(title)
         # cates_logits_2 = torch.mm(title, cores.t()) / self.tau
