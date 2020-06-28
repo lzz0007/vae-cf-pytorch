@@ -55,7 +55,7 @@ class MultiVAE(nn.Module):
 
         # newly added
         # load title and image
-        self.title = nn.Parameter(torch.empty(num_items, vocab_size))
+        self.title = nn.Parameter(torch.empty(num_items, 100))
         self.title.data = title_data
         self.image = nn.Parameter(torch.empty(num_items, 2048))
         self.image.data = image_data
@@ -82,7 +82,7 @@ class MultiVAE(nn.Module):
             nn.MaxPool2d(kernel_size=(1, 5), stride=1)
         )
 
-        self.linear = nn.Linear(dfac+vocab_size+2048-8, dfac)
+        self.linear = nn.Linear(dfac+100+2048-12, dfac)
         self.drop_title = nn.Dropout(dropout)
 
     def forward(self, input):
@@ -94,7 +94,7 @@ class MultiVAE(nn.Module):
         title = self.word_dilated(self.title.unsqueeze(1).unsqueeze(1))
         title = title.squeeze()
         image = self.img_layer1(self.image.unsqueeze(1).unsqueeze(1))
-        # image = self.img_layer2(image)
+        image = self.img_layer2(image)
         image = image.squeeze()
 
         items_concat = torch.cat((self.items, title, image), 1)
