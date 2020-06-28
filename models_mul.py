@@ -15,7 +15,7 @@ class MultiVAE(nn.Module):
     """
 
     def __init__(self, p_dims, tau, std, kfac,
-                 vocab_size, embedding_dim, hidden_dim, title_data, init_kmeans,
+                 vocab_size, embedding_dim, hidden_dim, title_data, image_data,
                  dropout, nogb=False, q_dims=None):
         super(MultiVAE, self).__init__()
 
@@ -50,16 +50,21 @@ class MultiVAE(nn.Module):
         self.save_emb = False
         self.nogb = nogb
 
+        self.drop = nn.Dropout(dropout)
+        self.init_weights()
+
+        # newly added
         self.title = nn.Parameter(torch.empty(num_items, vocab_size))
         self.title.data = title_data
         # self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        # self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
-        self.linear = nn.Linear(dfac+vocab_size, dfac)
+        # self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True
+
+        self.image = nn.Parameter(torch.empty(num_items, 2048))
+        self.image.data = image_data
+
+        self.linear = nn.Linear(dfac+vocab_size+2048, dfac)
         # self.linear = nn.Linear(embedding_dim, 100)
         self.drop_title = nn.Dropout(dropout)
-
-        self.drop = nn.Dropout(dropout)
-        self.init_weights()
 
     def forward(self, input):
         # clustering
@@ -71,7 +76,7 @@ class MultiVAE(nn.Module):
         # title = self.drop_title(title)
         # out_pack, (ht, ct) = self.lstm(title)
         # title = self.linear(ht[-1])
-        items_concat = torch.cat((self.items, self.title), 1)
+        items_concat = torch.cat((self.items, self.title, self.image), 1)
         items_final = self.linear(items_concat)
         # items_final = torch.tanh(items_final)
         items_final = F.normalize(items_final)
@@ -123,6 +128,7 @@ class MultiVAE(nn.Module):
         h = F.normalize(input)
         h = self.drop(h)
 
+        mu, std_q, lnvarq_sub_lnvar0 = None, None, None
         for i, layer in enumerate(self.q_layers):
             h = layer(h)
             if i != len(self.q_layers) - 1:

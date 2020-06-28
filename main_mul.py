@@ -16,6 +16,7 @@ import pandas as pd
 import os
 import pickle
 from sklearn.cluster import KMeans
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='amazon',
@@ -102,10 +103,20 @@ total_anneal_steps = 5 * num_batches
 #     titles.append(item_title['encoded'].iloc[i][0])
 # titles = np.array(titles)
 
+with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
+    dataset = pickle.load(f)
+
+item_title = dataset['data_mat']
+vocab2index = dataset['vocab2index']
+cat2index = dataset['cat2index']
+item2index = dataset['item2index']
+category_id = np.array(dataset['category_id'])
+
+
 embeddings = torch.load('embeddings.pt')
 
-kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(embeddings)
-init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
+# kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(embeddings)
+# init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
 
 titles = torch.from_numpy(embeddings).float().to(device)
 
@@ -115,6 +126,12 @@ total_anneal_steps = 5 * num_batches
 # define parameters for titles
 embedding_dim = 100
 hidden_dim = 100
+
+###############################################################################
+# load image
+###############################################################################
+img_features_filtered = torch.load('images_filtered.pt')
+img_features_filtered = torch.from_numpy(img_features_filtered).float().to(device)
 ###############################################################################
 # Build the model
 ###############################################################################
@@ -123,7 +140,7 @@ p_dims = [args.dfac, args.dfac, n_items]
 
 model = models_mul.MultiVAE(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
                             vocab_size=embeddings.shape[1], embedding_dim=embedding_dim, hidden_dim=hidden_dim,
-                            title_data=titles, init_kmeans=init_kmeans,
+                            title_data=titles, image_data=img_features_filtered,
                             dropout=args.keep, nogb=args.nogb, q_dims=None).to(device)
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 criterion = models_mul.loss_function
