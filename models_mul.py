@@ -55,9 +55,9 @@ class MultiVAE(nn.Module):
 
         # newly added
         # load title and image
-        self.title = nn.Parameter(torch.empty(num_items, vocab_size)).contiguous()
+        self.title = nn.Parameter(torch.empty(num_items, vocab_size))
         self.title.data = title_data
-        self.image = nn.Parameter(torch.empty(num_items, 2048)).contiguous()
+        self.image = nn.Parameter(torch.empty(num_items, 2048))
         self.image.data = image_data
 
         # model for title
