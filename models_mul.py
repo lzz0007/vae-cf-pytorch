@@ -66,24 +66,31 @@ class MultiVAE(nn.Module):
         # self.linear = nn.Linear(embedding_dim, 100)
         self.drop_title = nn.Dropout(dropout)
 
+        self.alpha = 1
+
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        # items = F.normalize(self.items)
+        items_final = F.normalize(self.items)
         # cates_logits_1 = torch.mm(items, cores.t()) / self.tau
+        norm_squared = torch.sum((items_final.unsqueeze(1) - cores) ** 2, 2)
+        numerator = 1.0 / (1.0 + (norm_squared / self.alpha))
+        power = float(self.alpha + 1) / 2
+        numerator = numerator ** power
+        cates_logits = numerator / torch.sum(numerator, dim=1, keepdim=True)
 
         # title = self.embeddings(self.title)
         # title = self.drop_title(title)
         # out_pack, (ht, ct) = self.lstm(title)
         # title = self.linear(ht[-1])
-        items_concat = torch.cat((self.items, self.title, self.image), 1)
-        items_final = self.linear(items_concat)
+        # items_concat = torch.cat((self.items, self.title, self.image), 1)
+        # items_final = self.linear(items_concat)
         # items_final = torch.tanh(items_final)
-        items_final = F.normalize(items_final)
+        # items_final = F.normalize(items_final)
         # title = F.normalize(title)
         # cates_logits_2 = torch.mm(title, cores.t()) / self.tau
         # cates_logits = (cates_logits_1+cates_logits_2)/2
-        cates_logits = torch.mm(items_final, cores.t()) / self.tau
+        # cates_logits = torch.mm(items_final, cores.t()) / self.tau
 
         if self.nogb:
             cates = F.softmax(cates_logits, dim=1)
@@ -122,7 +129,7 @@ class MultiVAE(nn.Module):
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
 
-        return std_list, logits
+        return std_list, logits, cates_logits
 
     def encode(self, input):
         h = F.normalize(input)
@@ -183,7 +190,7 @@ class MultiVAE(nn.Module):
             layer.bias.data.normal_(0.0, 0.001)
 
 
-def loss_function(x, std_list, recon_x, anneal=1.0):
+def loss_function(x, std_list, recon_x, anneal, output, target):
     # BCE = F.binary_cross_entropy(recon_x, x)
     # BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
     # KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
@@ -194,5 +201,20 @@ def loss_function(x, std_list, recon_x, anneal=1.0):
         kl_k = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
         kl = (kl_k if (kl is None) else (kl + kl_k))
     # neg_elbo = recon_loss + anneal * kl
+    loss_function = nn.KLDivLoss(reduction='sum')
+    tmp = output.log()
+    clustering_loss = (loss_function(output.log(), target) / output.shape[0])
+    # print(clustering_loss)
+    return recon_loss + anneal * kl + 10*clustering_loss
 
-    return recon_loss + anneal * kl
+
+def target_distribution(batch: torch.Tensor) -> torch.Tensor:
+    """
+    Compute the target distribution p_ij, given the batch (q_ij), as in 3.1.3 Equation 3 of
+    Xie/Girshick/Farhadi; this is used the KL-divergence loss function.
+
+    :param batch: [batch size, number of clusters] Tensor of dtype float
+    :return: [batch size, number of clusters] Tensor of dtype float
+    """
+    weight = (batch ** 2) / torch.sum(batch, 0)
+    return (weight.t() / torch.sum(weight, 1)).t()
