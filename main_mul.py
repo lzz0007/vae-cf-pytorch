@@ -37,7 +37,7 @@ parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=30, metavar='N',
+parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
@@ -53,8 +53,6 @@ parser.add_argument('--dfac', type=int, default=100,
                     help='Dimension of each facet.')
 parser.add_argument('--nogb', action='store_true', default=False,
                     help='Disable Gumbel-Softmax sampling.')
-parser.add_argument('--Target_distribution_update_interval', type=int, default=1, help='Target_distribution_update_interval.')
-
 # args = parser.parse_args()
 args = parser.parse_known_args()
 args = args[0]
@@ -182,7 +180,7 @@ def set_rng_seed(seed):
     torch.manual_seed(seed)
 
 
-def train(target, epoch):
+def train():
     set_rng_seed(args.seed)
 
     # Turn on training mode
@@ -192,7 +190,7 @@ def train(target, epoch):
     global update_count
 
     np.random.shuffle(idxlist)
-    cates_logits = None
+
     for batch_idx, start_idx in enumerate(range(0, N, args.batch_size)):
         end_idx = min(start_idx + args.batch_size, N)
         data = train_data[idxlist[start_idx:end_idx]]
@@ -206,11 +204,8 @@ def train(target, epoch):
 
         optimizer.zero_grad()
         # recon_batch, mu, logvar = model(data)
-        std_list, recon_batch, cates_logits = model(data)
-        if target is None:
-            loss = criterion(data, std_list, recon_batch, anneal, cates_logits.detach(), cates_logits.detach())
-        else:
-            loss = criterion(data, std_list, recon_batch, anneal, cates_logits.detach(), target.detach())
+        std_list, recon_batch = model(data)
+        loss = criterion(data, std_list, recon_batch, anneal)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -231,10 +226,9 @@ def train(target, epoch):
 
             start_time = time.time()
             train_loss = 0.0
-    return cates_logits
 
 
-def evaluate(data_tr, data_te, target):
+def evaluate(data_tr, data_te):
     set_rng_seed(args.seed)
     # Turn on evaluation mode
     model.eval()
@@ -261,9 +255,9 @@ def evaluate(data_tr, data_te, target):
                 anneal = args.anneal_cap
 
             # recon_batch, mu, logvar = model(data_tensor)
-            std_list, recon_batch, cates_logits = model(data_tensor)
+            std_list, recon_batch = model(data_tensor)
             # loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
-            loss = criterion(data_tensor, std_list, recon_batch, anneal, cates_logits.detach(), target.detach())
+            loss = criterion(data_tensor, std_list, recon_batch, anneal)
             total_loss += loss.item()
 
             # Exclude examples from training set
@@ -293,14 +287,14 @@ update_count = 0
 # At any point you can hit Ctrl + C to break out of training early.
 try:
     # train for items
-    target = train(target=None, epoch=0).detach()
+
     # disentangled
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
-        cates_logits = train(target, epoch)
+        train()
         # evaluate
-        val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te, target)
+        val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
@@ -320,10 +314,6 @@ try:
                 torch.save(model, f)
             best_n100 = n100
 
-        if epoch % args.Target_distribution_update_interval == 0:
-            target = models_mul.target_distribution(cates_logits).detach()
-
-
 except KeyboardInterrupt:
     print('-' * 89)
     print('Exiting from training early')
@@ -333,7 +323,7 @@ with open(args.save, 'rb') as f:
     model = torch.load(f)
 
 # Run on test data.
-test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te, target)
+test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
 print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
       'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
