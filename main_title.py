@@ -153,7 +153,7 @@ def train():
 
     np.random.shuffle(idxlist)
 
-    embeddings = np.array([]).reshape(0, train_data_array.shape[1])
+    embeddings = np.array([]).reshape(0, 100)
     for batch_idx, start_idx in enumerate(range(0, N, args.batch_size)):
         end_idx = min(start_idx + args.batch_size, N)
         data = train_data[idxlist[start_idx:end_idx]]
@@ -166,7 +166,7 @@ def train():
             anneal = args.anneal_cap
 
         optimizer.zero_grad()
-        recon_batch, mu, logvar = model(data)
+        recon_batch, mu, logvar, emb = model(data)
 
         loss = criterion(recon_batch, data, mu, logvar, anneal)
         loss.backward()
@@ -175,7 +175,7 @@ def train():
 
         # embeddings = np.concatenate((embeddings, recon_batch.detach().cpu().numpy()), axis=0)
         # embeddings.append(recon_batch.detach().cpu().numpy())
-        embeddings = np.vstack([embeddings, recon_batch.detach().cpu().numpy()])
+        embeddings = np.vstack([embeddings, emb.detach().cpu().numpy()])
         update_count += 1
 
         if batch_idx % args.log_interval == 0 and batch_idx > 0:
