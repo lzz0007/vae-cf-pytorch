@@ -18,6 +18,8 @@ import pickle
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 
+torch.backends.cudnn.enabled = False
+
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='amazon',
                     help='Movielens-20m dataset location')
