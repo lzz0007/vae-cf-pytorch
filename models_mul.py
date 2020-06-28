@@ -54,35 +54,52 @@ class MultiVAE(nn.Module):
         self.init_weights()
 
         # newly added
+        # load title and image
         self.title = nn.Parameter(torch.empty(num_items, vocab_size))
         self.title.data = title_data
-        # self.embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        # self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True
-
         self.image = nn.Parameter(torch.empty(num_items, 2048))
         self.image.data = image_data
 
-        self.linear = nn.Linear(dfac+vocab_size+2048, dfac)
-        # self.linear = nn.Linear(embedding_dim, 100)
+        # model for title
+        self.word_dilated = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=10, kernel_size=5, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=10, out_channels=1, kernel_size=5, padding=2),
+            nn.MaxPool2d(kernel_size=(1, 5), stride=1)
+        )
+
+        # model for image
+        self.img_layer1 = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(1, 5), stride=1)
+        )
+        self.img_layer2 = nn.Sequential(
+            nn.Conv2d(16, 1, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(1, 5), stride=1)
+        )
+
+        self.linear = nn.Linear(dfac+vocab_size+2048-12, dfac)
         self.drop_title = nn.Dropout(dropout)
 
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
         # items = F.normalize(self.items)
-        # cates_logits_1 = torch.mm(items, cores.t()) / self.tau
 
-        # title = self.embeddings(self.title)
-        # title = self.drop_title(title)
-        # out_pack, (ht, ct) = self.lstm(title)
-        # title = self.linear(ht[-1])
-        items_concat = torch.cat((self.items, self.title, self.image), 1)
+        # process title and image
+        title = self.word_dilated(self.title.unsqueeze(1).unsqueeze(1))
+        title = title.squeeze()
+        image = self.img_layer1(self.image.unsqueeze(1).unsqueeze(1))
+        image = self.img_layer2(image)
+        image = image.squeeze()
+
+        items_concat = torch.cat((self.items, title, image), 1)
         items_final = self.linear(items_concat)
-        # items_final = torch.tanh(items_final)
         items_final = F.normalize(items_final)
-        # title = F.normalize(title)
-        # cates_logits_2 = torch.mm(title, cores.t()) / self.tau
-        # cates_logits = (cates_logits_1+cates_logits_2)/2
         cates_logits = torch.mm(items_final, cores.t()) / self.tau
 
         if self.nogb:
