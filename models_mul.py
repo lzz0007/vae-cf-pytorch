@@ -200,19 +200,28 @@ class MultiVAE(nn.Module):
             layer.bias.data.normal_(0.0, 0.001)
 
 
-def loss_function(x, std_list, recon_x, anneal=1.0):
+def loss_function(x, std_list, std_list_t, std_list_i, recon_x, anneal=1.0):
     # BCE = F.binary_cross_entropy(recon_x, x)
     # BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
     # KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     recon_loss = torch.mean(torch.sum(-F.log_softmax(recon_x, 1) * x, -1))
     kl = None
+    kl_t, kl_i = None, None
     for i in range(len(std_list)):
         lnvarq_sub_lnvar0 = std_list[i]
         kl_k = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
         kl = (kl_k if (kl is None) else (kl + kl_k))
-    # neg_elbo = recon_loss + anneal * kl
 
-    return recon_loss + anneal * kl
+        lnvarq_sub_lnvar0_t = std_list_t[i]
+        kl_k_t = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0_t + torch.exp(lnvarq_sub_lnvar0_t) - 1.), dim=1))
+        kl_t = (kl_k_t if (kl_t is None) else (kl_t + kl_k_t))
+
+        lnvarq_sub_lnvar0_i = std_list_i[i]
+        kl_k_i = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0_i + torch.exp(lnvarq_sub_lnvar0_i) - 1.), dim=1))
+        kl_i = (kl_k_i if (kl_i is None) else (kl_i + kl_k_i))
+
+    # neg_elbo = recon_loss + anneal * kl
+    return recon_loss + anneal * (kl+kl_i+kl_t)
 
 
 class MultiVAE_Title(nn.Module):
@@ -337,7 +346,7 @@ class MultiVAE_Title(nn.Module):
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
 
-        return std_list, logits
+        return logits, std_list, std_list_t, std_list_i
 
     def clustering(self, cores, items):
         cores = F.normalize(cores)

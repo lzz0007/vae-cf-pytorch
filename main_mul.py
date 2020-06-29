@@ -211,8 +211,8 @@ def train():
 
         optimizer.zero_grad()
         # recon_batch, mu, logvar = model(data)
-        std_list, recon_batch = model(data)
-        loss = criterion(data, std_list, recon_batch, anneal)
+        recon_batch, std_list, std_list_t, std_list_i = model(data)
+        loss = criterion(data, std_list, std_list_t, std_list_i, recon_batch, anneal)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -262,9 +262,9 @@ def evaluate(data_tr, data_te):
                 anneal = args.anneal_cap
 
             # recon_batch, mu, logvar = model(data_tensor)
-            std_list, recon_batch = model(data_tensor)
+            recon_batch, std_list, std_list_t, std_list_i = model(data_tensor)
             # loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
-            loss = criterion(data_tensor, std_list, recon_batch, anneal)
+            loss = criterion(data_tensor, std_list, std_list_t, std_list_i, recon_batch, anneal)
             total_loss += loss.item()
 
             # Exclude examples from training set
