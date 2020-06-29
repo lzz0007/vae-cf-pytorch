@@ -147,7 +147,7 @@ p_dims = [2048, args.dfac, n_items]
 #                             dropout=args.keep, nogb=args.nogb, q_dims=None).to(device)
 
 model = models_mul.MultiVAE_Title(p_dims, title_data=titles, image_data=img_features_filtered,
-                                  q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac, nogb=args.nogb)
+                                  q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac, nogb=args.nogb).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 criterion = models_mul.loss_function
