@@ -317,7 +317,7 @@ class MultiVAE_Title(nn.Module):
             x_k_i = input * cates_k_i
             mu_k_i, std_k_i, lnvarq_sub_lnvar0_k_i = self.encode_img(x_k_i, self.q_layers_i)
             z_k_i = self.reparameterize(mu_k_i, std_k_i)
-            std_list_t.append(lnvarq_sub_lnvar0_k_i)
+            std_list_i.append(lnvarq_sub_lnvar0_k_i)
 
             if self.save_emb:
                 z_list.append(z_k)
