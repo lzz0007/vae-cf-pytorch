@@ -262,7 +262,7 @@ class MultiVAE_Title(nn.Module):
         self.image = nn.Parameter(torch.empty(num_items, 2048))
         self.image.data = image_data
 
-        self.linear = nn.Linear(dfac+100)
+        self.linear = nn.Linear(dfac+100, dfac)
 
         self.drop = nn.Dropout(dropout)
         self.init_weights()
