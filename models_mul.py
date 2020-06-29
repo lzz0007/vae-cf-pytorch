@@ -262,13 +262,18 @@ class MultiVAE_Title(nn.Module):
         self.image = nn.Parameter(torch.empty(num_items, 2048))
         self.image.data = image_data
 
+        self.linear = nn.Linear(dfac+100)
+
         self.drop = nn.Dropout(dropout)
         self.init_weights()
 
     def forward(self, input):
+        items = torch.cat((self.items, self.title), 1)
+        items = self.linear(items)
+
         # clustering
         cores = F.normalize(self.cores)
-        items = F.normalize(self.items)
+        items = F.normalize(items)
         cates_logits = torch.mm(items, cores.t()) / self.tau
 
         # items_bow = F.normalize(self.items_bow, dim=1)
