@@ -261,48 +261,54 @@ class MultiVAE_Title(nn.Module):
         self.title.data = title_data
         self.image = nn.Parameter(torch.empty(num_items, 2048))
         self.image.data = image_data
+        self.cores_t = nn.Parameter(torch.empty(self.kfac, 100))
+        nn.init.xavier_normal_(self.cores_t.data)
+        self.cores_i = nn.Parameter(torch.empty(self.kfac, 2048))
+        nn.init.xavier_normal_(self.cores_i.data)
 
-        self.linear = nn.Linear(2048+100, dfac)
+        self.q_layers_t = nn.ModuleList([nn.Linear(d_in, d_out) for
+                                       d_in, d_out in zip(temp_q_dims[:-1], temp_q_dims[1:])])
+        self.q_dims_i = [num_items, dfac, 2048]
+        temp_q_dims_i = self.q_dims_i[:-1] + [self.q_dims_i[-1] * 2]
+        self.q_layers_i = nn.ModuleList([nn.Linear(d_in, d_out) for
+                                       d_in, d_out in zip(temp_q_dims_i[:-1], temp_q_dims_i[1:])])
+
 
         self.drop = nn.Dropout(dropout)
         self.init_weights()
 
     def forward(self, input):
-        items = torch.cat((self.image, self.title), 1)
-        items = self.linear(items)
-
         # clustering
-        cores = F.normalize(self.cores)
-        items = F.normalize(items)
-        cates_logits = torch.mm(items, cores.t()) / self.tau
-
-        # items_bow = F.normalize(self.items_bow, dim=1)
-        # items_concat = torch.cat((items, items_bow), 1)
-        # items_final = self.items_layer(items_concat)
-        # cates_logits = torch.mm(items_final, cores.t())/self.tau
-
-        if self.nogb:
-            cates = F.softmax(cates_logits, dim=1)
-        else:
-            cates_dist = F.gumbel_softmax(cates_logits, tau=1)
-            cates_mode = F.softmax(cates_logits, dim=1)
-            if self.training:
-                cates = cates_dist
-            else:
-                cates = cates_mode
+        cates, items = self.clustering(self.cores, self.items)
+        cates_t, title = self.clustering(self.cores_t, self.title)
+        cates_i, image = self.clustering(self.cores_i, self.image)
 
         z_list = []
         probs = None
-        std_list = []
+        std_list, std_list_t,  std_list_i= [], [], []
         for k in range(self.kfac):
             # cates_k = torch.flatten(cates[:, k])
             cates_k = cates[:, k].unsqueeze(0)
+            cates_k_t = cates_t[:, k].unsqueeze(0)
+            cates_k_i = cates_i[:, k].unsqueeze(0)
 
             # q-network
             x_k = input * cates_k
-            mu_k, std_k, lnvarq_sub_lnvar0_k = self.encode(x_k)
+            mu_k, std_k, lnvarq_sub_lnvar0_k = self.encode(x_k, self.q_layers)
             z_k = self.reparameterize(mu_k, std_k)
             std_list.append(lnvarq_sub_lnvar0_k)
+
+            # q-network for title
+            x_k_t = input * cates_k_t
+            mu_k_t, std_k_t, lnvarq_sub_lnvar0_k_t = self.encode(x_k_t, self.q_layers_t)
+            z_k_t = self.reparameterize(mu_k_t, std_k_t)
+            std_list_t.append(lnvarq_sub_lnvar0_k_t)
+
+            # q-network for image
+            x_k_i = input * cates_k_i
+            mu_k_i, std_k_i, lnvarq_sub_lnvar0_k_i = self.encode_img(x_k_i, self.q_layers_i)
+            z_k_i = self.reparameterize(mu_k_i, std_k_i)
+            std_list_t.append(lnvarq_sub_lnvar0_k_i)
 
             if self.save_emb:
                 z_list.append(z_k)
@@ -312,26 +318,72 @@ class MultiVAE_Title(nn.Module):
             logits_k = torch.mm(z_k, items.t()) / self.tau
             probs_k = torch.exp(logits_k)
             probs_k = probs_k * cates_k
-            probs = (probs_k if (probs is None) else (probs + probs_k))
+
+            # p-network for title
+            z_k_t = F.normalize(z_k_t)
+            logits_k_t = torch.mm(z_k_t, title.t()) / self.tau
+            probs_k_t = torch.exp(logits_k_t)
+            probs_k_t = probs_k_t * cates_k_t
+
+            # p-network for image
+            z_k_i = F.normalize(z_k_i)
+            logits_k_i = torch.mm(z_k_i, image.t()) / self.tau
+            probs_k_i = torch.exp(logits_k_i)
+            probs_k_i = probs_k_i * cates_k_i
+
+            probs_k_avg = (probs_k + probs_k_t + probs_k_i)/3
+            probs = (probs_k_avg if (probs is None) else (probs + probs_k_avg))
 
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
 
         return std_list, logits
 
-    def encode(self, input):
+    def clustering(self, cores, items):
+        cores = F.normalize(cores)
+        items = F.normalize(items)
+        cates_logits = torch.mm(items, cores.t()) / self.tau
+        if self.nogb:
+            cates = F.softmax(cates_logits, dim=1)
+        else:
+            cates_dist = F.gumbel_softmax(cates_logits, tau=1)
+            cates_mode = F.softmax(cates_logits, dim=1)
+            if self.training:
+                cates = cates_dist
+            else:
+                cates = cates_mode
+        return cates, items
+
+    def encode(self, input, layers):
         h = F.normalize(input)
         h = self.drop(h)
 
-        for i, layer in enumerate(self.q_layers):
+        for i, layer in enumerate(layers):
             h = layer(h)
-            if i != len(self.q_layers) - 1:
+            if i != len(layers) - 1:
                 h = torch.tanh(h)
             else:  # for last layer
                 mu = h[:, :self.q_dims[-1]]
                 mu = F.normalize(mu)
                 # logvar = h[:, self.q_dims[-1]:]
                 lnvarq_sub_lnvar0 = -h[:, self.q_dims[-1]:]
+                std0 = self.std
+                std_q = torch.exp(0.5 * lnvarq_sub_lnvar0) * std0
+        return mu, std_q, lnvarq_sub_lnvar0
+
+    def encode_img(self, input, layers):
+        h = F.normalize(input)
+        h = self.drop(h)
+
+        for i, layer in enumerate(layers):
+            h = layer(h)
+            if i != len(layers) - 1:
+                h = torch.tanh(h)
+            else:  # for last layer
+                mu = h[:, :self.q_dims_i[-1]]
+                mu = F.normalize(mu)
+                # logvar = h[:, self.q_dims[-1]:]
+                lnvarq_sub_lnvar0 = -h[:, self.q_dims_i[-1]:]
                 std0 = self.std
                 std_q = torch.exp(0.5 * lnvarq_sub_lnvar0) * std0
         return mu, std_q, lnvarq_sub_lnvar0
