@@ -139,12 +139,16 @@ img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguo
 # Build the model
 ###############################################################################
 
-p_dims = [args.dfac, args.dfac, n_items]
+p_dims = [2048, args.dfac, n_items]
 
-model = models_mul.MultiVAE(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
-                            vocab_size=embeddings.shape[1], embedding_dim=embedding_dim, hidden_dim=hidden_dim,
-                            title_data=titles, image_data=img_features_filtered,
-                            dropout=args.keep, nogb=args.nogb, q_dims=None).to(device)
+# model = models_mul.MultiVAE(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
+#                             vocab_size=embeddings.shape[1], embedding_dim=embedding_dim, hidden_dim=hidden_dim,
+#                             title_data=titles, image_data=img_features_filtered,
+#                             dropout=args.keep, nogb=args.nogb, q_dims=None).to(device)
+
+model = models_mul.MultiVAE_Title(p_dims, title_data=titles, image_data=img_features_filtered,
+                                  q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac, nogb=args.nogb)
+
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 criterion = models_mul.loss_function
 
