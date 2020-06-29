@@ -551,7 +551,7 @@ class MultiVAE_user(nn.Module):
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
 
-        return logits, std_list, std_list_t, std_list_i
+        return logits, std_list
 
     def clustering(self, cores, items):
         cores = F.normalize(cores)
