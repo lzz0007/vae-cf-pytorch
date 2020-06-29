@@ -139,7 +139,7 @@ img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguo
 # Build the model
 ###############################################################################
 
-p_dims = [2048, args.dfac, n_items]
+p_dims = [args.dfac, args.dfac, n_items]
 
 # model = models_mul.MultiVAE(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
 #                             vocab_size=embeddings.shape[1], embedding_dim=embedding_dim, hidden_dim=hidden_dim,

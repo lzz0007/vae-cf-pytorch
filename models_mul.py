@@ -248,7 +248,7 @@ class MultiVAE_Title(nn.Module):
         num_items = self.q_dims[0]
         # self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
         # self.items = nn.Parameter(torch.empty(num_items, dfac))
-        self.cores = nn.Parameter(torch.empty(self.kfac, 2048))
+        self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
         nn.init.xavier_normal_(self.cores.data)
         # nn.init.xavier_normal_(self.items.data)
         self.tau = tau
@@ -268,7 +268,7 @@ class MultiVAE_Title(nn.Module):
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        items = F.normalize(self.image)
+        items = F.normalize(self.title)
         cates_logits = torch.mm(items, cores.t()) / self.tau
 
         # items_bow = F.normalize(self.items_bow, dim=1)
