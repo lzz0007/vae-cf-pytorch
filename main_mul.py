@@ -362,12 +362,12 @@ def evaluate(data_tr, data_te):
 best_n100 = -np.inf
 update_count = 0
 
-logging.basicConfig(filename='train_logs',
+logging.basicConfig(filename='train_logs_replace_item_with_title',
                             filemode='a',
                             format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                             datefmt='%H:%M:%S',
                             level=logging.DEBUG)
-
+logger = logging.getLogger()
 # At any point you can hit Ctrl + C to break out of training early.
 try:
     # train for items
@@ -387,8 +387,6 @@ try:
                 epoch, time.time() - epoch_start_time, val_loss,
                 n100, r20, r50))
         print('-' * 89)
-
-        logger = logging.getLogger()
         logger.info('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
               'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
                     'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
@@ -425,3 +423,12 @@ print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
       'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
 print('=' * 89)
+logger.info('=' * 89)
+logger.info('test loss')
+logger.info('| test loss {:4.2f} | '
+            'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
+            'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
+            '| r40 {:5.5f}| r50 {:5.5f}| r60 {:5.5f}| r70 {:5.5f}| r80 {:5.5f}| r90 {:5.5f}| r100 {:5.5f}'.format(
+    test_loss,
+    n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
+    r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
