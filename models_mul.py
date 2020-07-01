@@ -39,7 +39,7 @@ class MultiVAE(nn.Module):
         self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
         self.items = nn.Parameter(torch.empty(num_items, dfac))
         nn.init.xavier_normal_(self.cores.data)
-        # nn.init.xavier_normal_(self.items.data)
+        nn.init.xavier_normal_(self.items.data)
 
         # self.items.data = title_data # replace item with title
         # self.items.data = image_data # replace item with image
@@ -54,12 +54,12 @@ class MultiVAE(nn.Module):
         # self.image.data = image_data
         # self.linear = nn.Linear(dfac+2048, dfac)
 
-        # concate title with image
-        self.title = nn.Parameter(torch.empty(num_items, dfac))
-        self.title.data = title_data
-        self.image = nn.Parameter(torch.empty(num_items, 2048))
-        self.image.data = image_data
-        self.linear = nn.Linear(dfac+2048, dfac)
+        # # concate title with image
+        # self.title = nn.Parameter(torch.empty(num_items, dfac))
+        # self.title.data = title_data
+        # self.image = nn.Parameter(torch.empty(num_items, 2048))
+        # self.image.data = image_data
+        # self.linear = nn.Linear(dfac+2048, dfac)
 
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
@@ -72,7 +72,7 @@ class MultiVAE(nn.Module):
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        # items = F.normalize(self.items)
+        items = F.normalize(self.items)
 
         # # concate random with title
         # title = torch.cat((self.items, self.title), dim=1)
@@ -80,9 +80,9 @@ class MultiVAE(nn.Module):
         # items = F.normalize(items)
 
         # concate random with image
-        items = torch.cat((self.title, self.image), dim=1)
-        items = self.linear(items)
-        items = F.normalize(items)
+        # items = torch.cat((self.title, self.image), dim=1)
+        # items = self.linear(items)
+        # items = F.normalize(items)
         cates_logits = torch.mm(items, cores.t()) / self.tau
 
         if self.nogb:

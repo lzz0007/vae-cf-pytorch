@@ -69,7 +69,7 @@ if torch.cuda.is_available():
 
 device = torch.device("cuda" if args.cuda else "cpu")
 
-logging.basicConfig(filename='train_logs_input_title',
+logging.basicConfig(filename='train_logs_paper',
                             filemode='a',
                             format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                             datefmt='%H:%M:%S',
@@ -149,9 +149,9 @@ img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguo
 
 p_dims = [args.dfac, args.dfac, n_items]
 
-# model = models_mul.MultiVAE(p_dims, title_data=titles, image_data=img_features_filtered,
-#                             q_dims=None, dropout=args.keep, tau=args.tau,
-#                             std=args.std, kfac=args.kfac, nogb=args.nogb).to(device)
+model = models_mul.MultiVAE(p_dims, title_data=titles, image_data=img_features_filtered,
+                            q_dims=None, dropout=args.keep, tau=args.tau,
+                            std=args.std, kfac=args.kfac, nogb=args.nogb).to(device)
 
 # further process title and image with CNN
 # model = models_mul.MultiVAE_CNN(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
@@ -164,9 +164,9 @@ p_dims = [args.dfac, args.dfac, n_items]
 #                                   q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac,
 #                                   nogb=args.nogb).to(device)
 
-model = models_mul.MultiVAE_user(p_dims, title_data=titles, image_data=img_features_filtered,
-                                 q_dims=None, dropout=args.keep, tau=args.tau, std=args.std,
-                                 kfac=args.kfac, nogb=args.nogb).to(device)
+# model = models_mul.MultiVAE_user(p_dims, title_data=titles, image_data=img_features_filtered,
+#                                  q_dims=None, dropout=args.keep, tau=args.tau, std=args.std,
+#                                  kfac=args.kfac, nogb=args.nogb).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 criterion = models_mul.loss_function
