@@ -37,7 +37,7 @@ class MultiVAE(nn.Module):
         self.kfac = kfac
         num_items = self.q_dims[0]
         self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
-        self.items = nn.Parameter(torch.empty(num_items, dfac))
+        self.items = nn.Parameter(torch.empty(num_items, 2048))
         nn.init.xavier_normal_(self.cores.data)
         # nn.init.xavier_normal_(self.items.data)
 
