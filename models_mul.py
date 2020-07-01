@@ -49,7 +49,14 @@ class MultiVAE(nn.Module):
         # self.title.data = title_data
         # self.linear = nn.Linear(dfac+dfac, dfac)
 
-        # concate random with image
+        # # concate random with image
+        # self.image = nn.Parameter(torch.empty(num_items, 2048))
+        # self.image.data = image_data
+        # self.linear = nn.Linear(dfac+2048, dfac)
+
+        # concate title with image
+        self.title = nn.Parameter(torch.empty(num_items, dfac))
+        self.title.data = title_data
         self.image = nn.Parameter(torch.empty(num_items, 2048))
         self.image.data = image_data
         self.linear = nn.Linear(dfac+2048, dfac)
@@ -73,7 +80,7 @@ class MultiVAE(nn.Module):
         # items = F.normalize(items)
 
         # concate random with image
-        items = torch.cat((self.items, self.image), dim=1)
+        items = torch.cat((self.title, self.image), dim=1)
         items = self.linear(items)
         items = F.normalize(items)
         cates_logits = torch.mm(items, cores.t()) / self.tau
