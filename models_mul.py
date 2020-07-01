@@ -44,10 +44,15 @@ class MultiVAE(nn.Module):
         # self.items.data = title_data # replace item with title
         # self.items.data = image_data # replace item with image
 
-        # concat title with random
-        self.title = nn.Parameter(torch.empty(num_items, dfac))
-        self.title.data = title_data
-        self.linear = nn.Linear(dfac+dfac, dfac)
+        # # concat random with title
+        # self.title = nn.Parameter(torch.empty(num_items, dfac))
+        # self.title.data = title_data
+        # self.linear = nn.Linear(dfac+dfac, dfac)
+
+        # concate random with image
+        self.image = nn.Parameter(torch.empty(num_items, 2048))
+        self.image.data = image_data
+        self.linear = nn.Linear(dfac+2048, dfac)
 
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
@@ -62,9 +67,14 @@ class MultiVAE(nn.Module):
         cores = F.normalize(self.cores)
         # items = F.normalize(self.items)
 
-        # concate random with title
-        title = torch.cat((self.items, self.title), dim=1)
-        items = self.linear(title)
+        # # concate random with title
+        # title = torch.cat((self.items, self.title), dim=1)
+        # items = self.linear(title)
+        # items = F.normalize(items)
+
+        # concate random with image
+        items = torch.cat((self.items, self.image), dim=1)
+        items = self.linear(items)
         items = F.normalize(items)
         cates_logits = torch.mm(items, cores.t()) / self.tau
 
