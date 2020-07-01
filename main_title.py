@@ -77,7 +77,7 @@ device = torch.device("cuda" if args.cuda else "cpu")
 with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
     dataset = pickle.load(f)
 
-item_title = dataset['data_mat']
+item_title = dataset['meta_mat']
 vocab2index = dataset['vocab2index']
 cat2index = dataset['cat2index']
 item2index = dataset['item2index']
