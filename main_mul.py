@@ -17,6 +17,7 @@ import os
 import pickle
 from sklearn.cluster import KMeans
 from tqdm import tqdm
+import logging
 
 torch.backends.cudnn.enabled = False
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
@@ -109,7 +110,7 @@ total_anneal_steps = 5 * num_batches
 with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
     dataset = pickle.load(f)
 
-item_title = dataset['data_mat']
+item_title = dataset['meta_mat']
 vocab2index = dataset['vocab2index']
 cat2index = dataset['cat2index']
 item2index = dataset['item2index']
@@ -141,13 +142,20 @@ img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguo
 
 p_dims = [args.dfac, args.dfac, n_items]
 
-# model = models_mul.MultiVAE(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
+model = models_mul.MultiVAE(p_dims, title_data=titles, image_data=img_features_filtered,
+                            q_dims=None, dropout=args.keep, tau=args.tau,
+                            std=args.std, kfac=args.kfac, nogb=args.nogb).to(device)
+
+# further process title and image with CNN
+# model = models_mul.MultiVAE_CNN(p_dims, tau=args.tau, std=args.std, kfac=args.kfac,
 #                             vocab_size=embeddings.shape[1], embedding_dim=embedding_dim, hidden_dim=hidden_dim,
 #                             title_data=titles, image_data=img_features_filtered,
 #                             dropout=args.keep, nogb=args.nogb, q_dims=None).to(device)
 
-model = models_mul.MultiVAE_Title(p_dims, title_data=titles, image_data=img_features_filtered,
-                                  q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac, nogb=args.nogb).to(device)
+# use multiple encoders and decoders for each modality
+# model = models_mul.MultiVAE_Mul(p_dims, title_data=titles, image_data=img_features_filtered,
+#                                   q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac,
+#                                   nogb=args.nogb).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 criterion = models_mul.loss_function
@@ -211,8 +219,8 @@ def train():
 
         optimizer.zero_grad()
         # recon_batch, mu, logvar = model(data)
-        recon_batch, std_list, std_list_t, std_list_i = model(data)
-        loss = criterion(data, std_list, std_list_t, std_list_i, recon_batch, anneal)
+        recon_batch, std_list = model(data)
+        loss = criterion(data, std_list, recon_batch, anneal)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -247,6 +255,9 @@ def evaluate(data_tr, data_te):
     r20_list = []
     r50_list = []
 
+    n10_list, n20_list, n30_list, n40_list, n50_list, n60_list, n70_list, n80_list, n90_list = ([] for i in range(9))
+    r10_list, r30_list, r40_list, r60_list, r70_list, r80_list, r90_list, r100_list = ([] for i in range(8))
+
     with torch.no_grad():
         for start_idx in range(0, e_N, args.batch_size):
             end_idx = min(start_idx + args.batch_size, N)
@@ -262,9 +273,9 @@ def evaluate(data_tr, data_te):
                 anneal = args.anneal_cap
 
             # recon_batch, mu, logvar = model(data_tensor)
-            recon_batch, std_list, std_list_t, std_list_i = model(data_tensor)
+            recon_batch, std_list = model(data_tensor)
             # loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
-            loss = criterion(data_tensor, std_list, std_list_t, std_list_i, recon_batch, anneal)
+            loss = criterion(data_tensor, std_list, recon_batch, anneal)
             total_loss += loss.item()
 
             # Exclude examples from training set
@@ -280,16 +291,82 @@ def evaluate(data_tr, data_te):
             r20_list.append(r20)
             r50_list.append(r50)
 
+            n10 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 10)
+            n20 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 20)
+            n30 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 30)
+            n40 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 40)
+            n50 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 50)
+            n60 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 60)
+            n70 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 70)
+            n80 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 80)
+            n90 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 90)
+
+            n10_list.append(n10)
+            n20_list.append(n20)
+            n30_list.append(n30)
+            n40_list.append(n40)
+            n50_list.append(n50)
+            n60_list.append(n60)
+            n70_list.append(n70)
+            n80_list.append(n80)
+            n90_list.append(n90)
+
+            r10 = metric.Recall_at_k_batch(recon_batch, heldout_data, 10)
+            r30 = metric.Recall_at_k_batch(recon_batch, heldout_data, 30)
+            r40 = metric.Recall_at_k_batch(recon_batch, heldout_data, 40)
+            r60 = metric.Recall_at_k_batch(recon_batch, heldout_data, 60)
+            r70 = metric.Recall_at_k_batch(recon_batch, heldout_data, 70)
+            r80 = metric.Recall_at_k_batch(recon_batch, heldout_data, 80)
+            r90 = metric.Recall_at_k_batch(recon_batch, heldout_data, 90)
+            r100 = metric.Recall_at_k_batch(recon_batch, heldout_data, 100)
+
+            r10_list.append(r10)
+            r30_list.append(r30)
+            r40_list.append(r40)
+            r60_list.append(r60)
+            r70_list.append(r70)
+            r80_list.append(r80)
+            r90_list.append(r90)
+            r100_list.append(r100)
+
     total_loss /= len(range(0, e_N, args.batch_size))
     n100_list = np.concatenate(n100_list)
     r20_list = np.concatenate(r20_list)
     r50_list = np.concatenate(r50_list)
 
-    return total_loss, np.mean(n100_list), np.mean(r20_list), np.mean(r50_list)
+    n10_list = np.concatenate(n10_list)
+    n20_list = np.concatenate(n20_list)
+    n30_list = np.concatenate(n30_list)
+    n40_list = np.concatenate(n40_list)
+    n50_list = np.concatenate(n50_list)
+    n60_list = np.concatenate(n60_list)
+    n70_list = np.concatenate(n70_list)
+    n80_list = np.concatenate(n80_list)
+    n90_list = np.concatenate(n90_list)
 
+    r10_list = np.concatenate(r10_list)
+    r30_list = np.concatenate(r30_list)
+    r40_list = np.concatenate(r40_list)
+    r60_list = np.concatenate(r60_list)
+    r70_list = np.concatenate(r70_list)
+    r80_list = np.concatenate(r80_list)
+    r90_list = np.concatenate(r90_list)
+    r100_list = np.concatenate(r100_list)
+
+    # return total_loss, np.mean(n100_list), np.mean(r20_list), np.mean(r50_list)
+    return total_loss, np.mean(n10_list), np.mean(n20_list), np.mean(n30_list), np.mean(n40_list), np.mean(n50_list), \
+           np.mean(n60_list), np.mean(n70_list), np.mean(n80_list), np.mean(n90_list), np.mean(n100_list), \
+           np.mean(r10_list), np.mean(r20_list), np.mean(r30_list), np.mean(r40_list), np.mean(r50_list), \
+           np.mean(r60_list), np.mean(r70_list), np.mean(r80_list), np.mean(r90_list), np.mean(r100_list),
 
 best_n100 = -np.inf
 update_count = 0
+
+logging.basicConfig(filename='train_logs',
+                            filemode='a',
+                            format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                            datefmt='%H:%M:%S',
+                            level=logging.DEBUG)
 
 # At any point you can hit Ctrl + C to break out of training early.
 try:
@@ -301,13 +378,24 @@ try:
         # train
         train()
         # evaluate
-        val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
+        # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
+        val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
+        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
                 epoch, time.time() - epoch_start_time, val_loss,
                 n100, r20, r50))
         print('-' * 89)
+
+        logger = logging.getLogger()
+        logger.info('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
+              'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
+                    'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
+                    '| r40 {:5.5f}| r50 {:5.5f}| r60 {:5.5f}| r70 {:5.5f}| r80 {:5.5f}| r90 {:5.5f}| r100 {:5.5f}'.format(
+                epoch, time.time() - epoch_start_time, val_loss,
+                 n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
+                    r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
 
         n_iter = epoch * len(range(0, N, args.batch_size))
         writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)
@@ -330,7 +418,9 @@ with open(args.save, 'rb') as f:
     model = torch.load(f)
 
 # Run on test data.
-test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
+# test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
+test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
+        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te)
 print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
       'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
