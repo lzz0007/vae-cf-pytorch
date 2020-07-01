@@ -290,8 +290,8 @@ try:
             predicted = kmeans.fit_predict(np.asarray(embeddings))
             cm = clustering_metrics(category_id, predicted)
             new_predict = cm.evaluationClusterModelFromLabel()
-        with open('embeddings.pt', 'wb') as f:
-            torch.save(embeddings, f)
+        with open('embeddings.pickle', 'wb') as f:
+            pickle.dump(embeddings, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 except KeyboardInterrupt:
