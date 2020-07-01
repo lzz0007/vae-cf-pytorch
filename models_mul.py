@@ -37,12 +37,17 @@ class MultiVAE(nn.Module):
         self.kfac = kfac
         num_items = self.q_dims[0]
         self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
-        self.items = nn.Parameter(torch.empty(num_items, 2048))
+        self.items = nn.Parameter(torch.empty(num_items, dfac))
         nn.init.xavier_normal_(self.cores.data)
         # nn.init.xavier_normal_(self.items.data)
 
         # self.items.data = title_data # replace item with title
-        self.items.data = image_data # replace item with image
+        # self.items.data = image_data # replace item with image
+
+        # concat title with random
+        self.title = nn.Parameter(torch.empty(num_items, dfac))
+        self.title.data = title_data
+        self.linear = nn.Linear(dfac+dfac, dfac)
 
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
@@ -55,13 +60,13 @@ class MultiVAE(nn.Module):
     def forward(self, input):
         # clustering
         cores = F.normalize(self.cores)
-        items = F.normalize(self.items)
-        cates_logits = torch.mm(items, cores.t()) / self.tau
+        # items = F.normalize(self.items)
 
-        # items_bow = F.normalize(self.items_bow, dim=1)
-        # items_concat = torch.cat((items, items_bow), 1)
-        # items_final = self.items_layer(items_concat)
-        # cates_logits = torch.mm(items_final, cores.t())/self.tau
+        # concate random with title
+        title = torch.cat((self.items, self.title), dim=1)
+        items = self.linear(title)
+        items = F.normalize(items)
+        cates_logits = torch.mm(items, cores.t()) / self.tau
 
         if self.nogb:
             cates = F.softmax(cates_logits, dim=1)

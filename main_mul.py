@@ -140,7 +140,7 @@ img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguo
 # Build the model
 ###############################################################################
 
-p_dims = [2048, args.dfac, n_items]
+p_dims = [args.dfac, args.dfac, n_items]
 
 model = models_mul.MultiVAE(p_dims, title_data=titles, image_data=img_features_filtered,
                             q_dims=None, dropout=args.keep, tau=args.tau,
@@ -362,7 +362,7 @@ def evaluate(data_tr, data_te):
 best_n100 = -np.inf
 update_count = 0
 
-logging.basicConfig(filename='train_logs_replace_item_with_image',
+logging.basicConfig(filename='train_logs_concate_random_with_title',
                             filemode='a',
                             format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                             datefmt='%H:%M:%S',
