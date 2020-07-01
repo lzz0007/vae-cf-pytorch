@@ -41,7 +41,8 @@ class MultiVAE(nn.Module):
         nn.init.xavier_normal_(self.cores.data)
         # nn.init.xavier_normal_(self.items.data)
 
-        self.items.data = title_data # replace item with title
+        # self.items.data = title_data # replace item with title
+        self.items.data = image_data # replace item with image
 
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior

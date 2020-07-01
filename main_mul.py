@@ -362,7 +362,7 @@ def evaluate(data_tr, data_te):
 best_n100 = -np.inf
 update_count = 0
 
-logging.basicConfig(filename='train_logs_replace_item_with_title',
+logging.basicConfig(filename='train_logs_replace_item_with_image',
                             filemode='a',
                             format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                             datefmt='%H:%M:%S',
