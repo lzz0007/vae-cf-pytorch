@@ -140,8 +140,8 @@ class MultiVAE(nn.Module):
         return mu, std_q, lnvarq_sub_lnvar0
 
     def title_encoder(self, x):
-        h = self.swish(x.view(x.shape[0], -1))
-        h = self.swish(self.fc2(h))
+        h = torch.tanh(x.view(x.shape[0], -1))
+        h = torch.tanh(self.fc2(h))
         return self.fc31(h), self.fc32(h)
 
     def reparameterize(self, mu, std):
