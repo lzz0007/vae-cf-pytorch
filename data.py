@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from scipy import sparse
 import numpy as np
+import pickle
 
 class DataLoader():
     '''
@@ -41,7 +42,15 @@ class DataLoader():
         data = sparse.csr_matrix((np.ones_like(rows),
                                  (rows, cols)), dtype='float64',
                                  shape=(n_users, self.n_items))
-        return data
+        df = tp.drop_duplicates(keep='first')
+        res = dict()
+        for i, row in df.iterrows():
+            if row['uid'] in res:
+                res[row['uid']].append(row['sid'])
+            else:
+                res[row['uid']] = [row['sid']]
+
+        return data, res
     
     def _load_tr_te_data(self, datatype='test'):
         tr_path = os.path.join(self.pro_dir, '{}_tr.csv'.format(datatype))
@@ -115,8 +124,6 @@ if __name__ == '__main__':
     which_dataset_to_use = 4  # in {0, 1, 2, 3}, see below.
     dataset = {0: 'ml-latest-small', 1: 'ml-1m', 2: 'ml-20m', 3: 'netflix', 4: 'amazon'}
 
-    raw_data = pd.read_csv('amazon/ratings.csv')
-
     n_heldout_users = (50, 500, 10000, 40000, 900)[which_dataset_to_use]
     DATA_DIR = '%s/' % dataset[which_dataset_to_use]
     print("Load and Preprocess %s dataset" % dataset[which_dataset_to_use])
@@ -162,6 +169,10 @@ if __name__ == '__main__':
     with open(os.path.join(pro_dir, 'unique_sid.txt'), 'w') as f:
         for sid in unique_sid:
             f.write('%s\n' % sid)
+
+    mapping = {'item2id': show2id, 'user2id': profile2id}
+    with open(os.path.join(pro_dir, 'mapping.pickle'), 'wb') as f:
+        pickle.dump(mapping, f, protocol=pickle.HIGHEST_PROTOCOL)
     
     vad_plays = raw_data.loc[raw_data['userId'].isin(vd_users)]
     vad_plays = vad_plays.loc[vad_plays['movieId'].isin(unique_sid)]

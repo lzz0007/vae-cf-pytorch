@@ -9,8 +9,8 @@ def NDCG_binary_at_k_batch(X_pred, heldout_batch, k=100):
     ASSUMPTIONS: all the 0's in heldout_data indicate 0 relevance
     '''
     batch_users = X_pred.shape[0]
-    idx_topk_part = bn.argpartition(-X_pred, k, axis=1)
-    topk_part = X_pred[np.arange(batch_users)[:, np.newaxis],
+    idx_topk_part = bn.argpartition(-X_pred, k, axis=1) # return top k index
+    topk_part = X_pred[np.arange(batch_users)[:, np.newaxis], # newaxis to increase one dimension
                        idx_topk_part[:, :k]]
     idx_part = np.argsort(-topk_part, axis=1)
 

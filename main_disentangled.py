@@ -14,7 +14,7 @@ import metric
 import torch.nn.functional as F
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
-parser.add_argument('--data', type=str, default='amazon',
+parser.add_argument('--data', type=str, default='data/amazon',
                     help='Movielens-20m dataset location')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
@@ -65,7 +65,7 @@ device = torch.device("cuda" if args.cuda else "cpu")
 loader = data.DataLoader(args.data)
 
 n_items = loader.load_n_items()
-train_data = loader.load_data('train')
+train_data, _ = loader.load_data('train')
 vad_data_tr, vad_data_te = loader.load_data('validation')
 test_data_tr, test_data_te = loader.load_data('test')
 
