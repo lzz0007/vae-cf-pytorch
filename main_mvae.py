@@ -203,7 +203,7 @@ def train():
         data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
         for i, c in enumerate(data_title_word):
             data_title_mask[i,:len(c),:] = c
-        data_title_mask = torch.LongTensor(data_title_mask)
+        data_title_mask = torch.LongTensor(data_title_mask).to(device)
 
         # anneal
         if total_anneal_steps > 0:
