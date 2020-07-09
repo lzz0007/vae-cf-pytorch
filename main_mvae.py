@@ -20,7 +20,7 @@ from tqdm import tqdm
 import logging
 
 # torch.backends.cudnn.enabled = False
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='data/amazon',
