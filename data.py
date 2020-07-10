@@ -73,10 +73,10 @@ class DataLoader():
         df = tp_tr.drop_duplicates(keep='first')
         res = dict()
         for i, row in df.iterrows():
-            if row['uid'] in res:
-                res[row['uid']].append(row['sid'])
+            if (row['uid']-start_idx) in res:
+                res[row['uid']-start_idx].append(row['sid'])
             else:
-                res[row['uid']] = [row['sid']]
+                res[row['uid']-start_idx] = [row['sid']]
         return data_tr, data_te, res
 
 

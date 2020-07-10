@@ -240,6 +240,10 @@ def train():
 
 
 def evaluate(data_tr, data_te, data_buy):
+    # data_tr = vad_data_tr
+    # data_te = vad_data_te
+    # data_buy = vad_buy
+
     set_rng_seed(args.seed)
     # Turn on evaluation mode
     model.eval()
@@ -276,7 +280,6 @@ def evaluate(data_tr, data_te, data_buy):
             for i, c in enumerate(data_title_word):
                 data_title_mask[i, :len(c), :] = c
             data_title_mask = torch.LongTensor(data_title_mask).to(device)
-
 
             if total_anneal_steps > 0:
                 anneal = min(args.anneal_cap,
