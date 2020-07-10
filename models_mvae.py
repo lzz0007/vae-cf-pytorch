@@ -48,13 +48,13 @@ class MultiVAE(nn.Module):
         self.init_weights()
 
         # center for title
-        self.cores_title = nn.Parameter(torch.empty(self.kfac, 100*512))
+        self.cores_title = nn.Parameter(torch.empty(self.kfac, 100*256))
         nn.init.xavier_normal_(self.cores_title.data)
         # for title encoder
-        self.fc1_enc = nn.Embedding(17424, 512)
-        self.fc2_enc = nn.Linear(512 * 100 * 102, 512)
-        self.fc31_enc = nn.Linear(512, 100)
-        self.fc32_enc = nn.Linear(512, 100)
+        self.fc1_enc = nn.Embedding(17424, 256)
+        self.fc2_enc = nn.Linear(256 * 100 * 102, 256)
+        self.fc31_enc = nn.Linear(256, 100)
+        self.fc32_enc = nn.Linear(256, 100)
         # for title decoder
         self.fc1_dec = nn.Linear(100, 128)
         self.fc2_dec = nn.Linear(128, 128)
