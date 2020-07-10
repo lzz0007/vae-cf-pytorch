@@ -20,7 +20,7 @@ from tqdm import tqdm
 import logging
 
 # torch.backends.cudnn.enabled = False
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='data/amazon',
@@ -51,7 +51,7 @@ parser.add_argument('--tau', type=float, default=0.1,
                     help='Temperature of sigmoid/softmax, in (0,oo).')
 parser.add_argument('--std', type=float, default=0.075,
                     help='Standard deviation of the Gaussian prior.')
-parser.add_argument('--kfac', type=int, default=7,
+parser.add_argument('--kfac', type=int, default=3,
                     help='Number of facets (macro concepts).')
 parser.add_argument('--dfac', type=int, default=100,
                     help='Dimension of each facet.')
