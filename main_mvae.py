@@ -386,7 +386,7 @@ try:
         # evaluate
         # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te)
+        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te, vad_buy)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
@@ -424,7 +424,7 @@ with open(args.save, 'rb') as f:
 # Run on test data.
 # test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
 test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te)
+        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy)
 print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
       'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
