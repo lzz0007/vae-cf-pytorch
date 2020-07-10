@@ -268,12 +268,21 @@ def evaluate(data_tr, data_te, data_buy):
             data_tensor = naive_sparse2tensor(data).to(device)
 
             # title
-            data_title = [data_buy[i] for i in range(start_idx, end_idx)]
+            data_title = []
+            for i in range(start_idx, end_idx):
+                if i in data_buy:
+                    data_title.append(data_buy[i])
+                else:
+                    data_title.append([])
+            # data_title = [data_buy[i] for i in range(start_idx, end_idx)]
             data_title_word = []
             for i in data_title:
                 tmp = []
-                for j in i:
-                    tmp.append(item_title[j].tolist())
+                if not i:
+                    tmp.append([0]*100)
+                else:
+                    for j in i:
+                        tmp.append(item_title[j].tolist())
                 data_title_word.append(tmp)
             # max_item = max([len(i) for i in data_title])
             data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
