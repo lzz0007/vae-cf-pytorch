@@ -41,7 +41,7 @@ parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=100, metavar='N',
+parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
@@ -237,6 +237,7 @@ def train():
 
             start_time = time.time()
             train_loss = 0.0
+        break
 
 
 def evaluate(data_tr, data_te, data_buy):
@@ -430,8 +431,8 @@ except KeyboardInterrupt:
     print('Exiting from training early')
 
 # Load the best saved model.
-with open(args.save, 'rb') as f:
-    model = torch.load(f)
+# with open(args.save, 'rb') as f:
+#     model = torch.load(f)
 
 # Run on test data.
 # test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
