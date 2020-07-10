@@ -69,12 +69,22 @@ class DataLoader():
                                     (rows_tr, cols_tr)), dtype='float64', shape=(end_idx - start_idx + 1, self.n_items))
         data_te = sparse.csr_matrix((np.ones_like(rows_te),
                                     (rows_te, cols_te)), dtype='float64', shape=(end_idx - start_idx + 1, self.n_items))
-        return data_tr, data_te
+
+        df = tp_tr.drop_duplicates(keep='first')
+        res = dict()
+        for i, row in df.iterrows():
+            if row['uid'] in res:
+                res[row['uid']].append(row['sid'])
+            else:
+                res[row['uid']] = [row['sid']]
+        return data_tr, data_te, df
+
 
 def get_count(tp, id):
     playcount_groupbyid = tp[[id]].groupby(id, as_index=False)
     count = playcount_groupbyid.size()
     return count
+
 
 def filter_triplets(tp, min_uc=5, min_sc=0):
     if min_sc > 0:
@@ -87,6 +97,7 @@ def filter_triplets(tp, min_uc=5, min_sc=0):
     
     usercount, itemcount = get_count(tp, 'userId'), get_count(tp, 'movieId')
     return tp, usercount, itemcount
+
 
 def split_train_test_proportion(data, test_prop=0.2):
     data_grouped_by_user = data.groupby('userId')
@@ -112,11 +123,11 @@ def split_train_test_proportion(data, test_prop=0.2):
 
     return data_tr, data_te
 
+
 def numerize(tp, profile2id, show2id):
     uid = tp['userId'].apply(lambda x: profile2id[x])
     sid = tp['movieId'].apply(lambda x: show2id[x])
     return pd.DataFrame(data={'uid': uid, 'sid': sid}, columns=['uid', 'sid'])
-
 
 
 if __name__ == '__main__':

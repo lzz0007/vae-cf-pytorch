@@ -85,8 +85,8 @@ loader = data.DataLoader(args.data)
 n_items = loader.load_n_items()
 train_data, train_buy = loader.load_data('train')
 
-vad_data_tr, vad_data_te = loader.load_data('validation')
-test_data_tr, test_data_te = loader.load_data('test')
+vad_data_tr, vad_data_te, vad_buy = loader.load_data('validation')
+test_data_tr, test_data_te, test_buy = loader.load_data('test')
 
 N = train_data.shape[0]
 idxlist = list(range(N))
@@ -239,7 +239,7 @@ def train():
             train_loss = 0.0
 
 
-def evaluate(data_tr, data_te):
+def evaluate(data_tr, data_te, data_buy):
     set_rng_seed(args.seed)
     # Turn on evaluation mode
     model.eval()
@@ -257,10 +257,26 @@ def evaluate(data_tr, data_te):
     with torch.no_grad():
         for start_idx in range(0, e_N, args.batch_size):
             end_idx = min(start_idx + args.batch_size, N)
+
+            # seq
             data = data_tr[e_idxlist[start_idx:end_idx]]
             heldout_data = data_te[e_idxlist[start_idx:end_idx]]
-
             data_tensor = naive_sparse2tensor(data).to(device)
+
+            # title
+            data_title = [data_buy[i] for i in range(start_idx, end_idx)]
+            data_title_word = []
+            for i in data_title:
+                tmp = []
+                for j in i:
+                    tmp.append(item_title[j].tolist())
+                data_title_word.append(tmp)
+            # max_item = max([len(i) for i in data_title])
+            data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
+            for i, c in enumerate(data_title_word):
+                data_title_mask[i, :len(c), :] = c
+            data_title_mask = torch.LongTensor(data_title_mask).to(device)
+
 
             if total_anneal_steps > 0:
                 anneal = min(args.anneal_cap,
@@ -269,7 +285,7 @@ def evaluate(data_tr, data_te):
                 anneal = args.anneal_cap
 
             # recon_batch, mu, logvar = model(data_tensor)
-            recon_batch, std_list = model(data_tensor)
+            recon_batch, std_list = model(data_tensor, data_title_mask)
             # loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
             loss = criterion(data_tensor, std_list, recon_batch, anneal)
             total_loss += loss.item()
