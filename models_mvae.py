@@ -50,11 +50,16 @@ class MultiVAE(nn.Module):
         # center for title
         self.cores_title = nn.Parameter(torch.empty(self.kfac, 100*512))
         nn.init.xavier_normal_(self.cores_title.data)
-        # for title
-        self.fc1 = nn.Embedding(17424, 512)
-        self.fc2 = nn.Linear(512 * 100 * 102, 512)
-        self.fc31 = nn.Linear(512, 100)
-        self.fc32 = nn.Linear(512, 100)
+        # for title encoder
+        self.fc1_enc = nn.Embedding(17424, 256)
+        self.fc2_enc = nn.Linear(256 * 100 * 102, 256)
+        self.fc31_enc = nn.Linear(256, 100)
+        self.fc32_enc = nn.Linear(256, 100)
+        # for title decoder
+        self.fc1_dec = nn.Linear(100, 256)
+        self.fc2_dec = nn.Linear(256, 256)
+        self.fc3_dec = nn.Linear(256, 256)
+        self.fc4_dec = nn.Linear(256, 17424)
         self.swish = Swish()
 
         self.experts = ProductOfExperts()
@@ -69,7 +74,7 @@ class MultiVAE(nn.Module):
         cates_logits = torch.mm(items, cores.t()) / self.tau # 13015*7
         cates = self.cate_softmax(cates_logits) # 13015x7
 
-        title_emb = self.fc1(data_title).view(batch_size, data_title.shape[1], -1) # 100x102x51200
+        title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1) # 100x102x51200
         cates_logits_title = title_emb.matmul(self.cores_title.t())/self.tau # 100x102x7
         cates_title = self.cate_softmax(cates_logits_title) # 100x102x7
 
@@ -100,18 +105,20 @@ class MultiVAE(nn.Module):
             mu_k, std_k = self.experts(mu_k, std_k) # 100x100
 
             # zk embedding
-            z_k = self.reparameterize(mu_k, std_k)
+            z_k = self.reparameterize(mu_k, std_k) # 100x100
 
 
             # seq decoder
-            z_k = F.normalize(z_k)
-            logits_k = torch.mm(z_k, items.t()) / self.tau
+            z_k = F.normalize(z_k) # 100x100
+            logits_k = torch.mm(z_k, items.t()) / self.tau # 100x13015
             probs_k = torch.exp(logits_k)
-            probs_k = probs_k * cates_k
+            probs_k = probs_k * cates_k # 100x13015
             probs = (probs_k if (probs is None) else (probs + probs_k))
 
             # title decoder
-            # title_recon = self.title_decoder(z_k)
+            # title_k = self.title_decoder(z_k)
+            # title_k = title_k * cates_title
+            # probs_title = (title_k if (probs_title is None) else (probs_title + title_k))
 
             std_list.append(lnvarq_seq_k)
             if self.save_emb:
@@ -141,8 +148,14 @@ class MultiVAE(nn.Module):
 
     def title_encoder(self, x):
         h = self.swish(x.view(x.shape[0], -1))
+        h = self.swish(self.fc2_enc(h))
+        return self.fc31_enc(h), self.fc32_enc(h)
+
+    def title_decoder(self, x):
+        h = self.swish(self.fc1(x))
         h = self.swish(self.fc2(h))
-        return self.fc31(h), self.fc32(h)
+        h = self.swish(self.fc3(h))
+        return h
 
     def reparameterize(self, mu, std):
         if self.training:
