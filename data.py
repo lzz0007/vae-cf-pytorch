@@ -77,7 +77,7 @@ class DataLoader():
                 res[row['uid']].append(row['sid'])
             else:
                 res[row['uid']] = [row['sid']]
-        return data_tr, data_te, df
+        return data_tr, data_te, res
 
 
 def get_count(tp, id):
