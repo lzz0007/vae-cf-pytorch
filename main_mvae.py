@@ -184,7 +184,7 @@ def train():
 
     np.random.shuffle(idxlist)
 
-    for batch_idx, start_idx in tqdm(enumerate(range(0, N, args.batch_size))):
+    for batch_idx, start_idx in enumerate(range(0, N, args.batch_size)):
         end_idx = min(start_idx + args.batch_size, N)
 
         # seq
