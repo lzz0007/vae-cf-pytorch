@@ -74,8 +74,11 @@ class MultiVAE(nn.Module):
         cates_logits = torch.mm(items, cores.t()) / self.tau # 13015*7
         cates = self.cate_softmax(cates_logits) # 13015x7
 
+        # print(torch.max(data_title))
         title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1) # 100x102x51200
-        cates_logits_title = title_emb.matmul(self.cores_title.t())/self.tau # 100x102x7
+        title_emb = F.normalize(title_emb)
+        cores_title = F.normalize(self.cores_title)
+        cates_logits_title = title_emb.matmul(cores_title.t())/self.tau # 100x102x7
         cates_title = self.cate_softmax(cates_logits_title) # 100x102x7
 
         z_list = []

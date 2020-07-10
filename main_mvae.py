@@ -25,7 +25,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='data/amazon',
                     help='Movielens-20m dataset location')
-parser.add_argument('--lr', type=float, default=1e-3,
+parser.add_argument('--lr', type=float, default=1e-4,
                     help='initial learning rate')
 parser.add_argument('--wd', type=float, default=0.001,
                     help='weight decay coefficient')
@@ -192,7 +192,23 @@ def train():
         data = naive_sparse2tensor(data).to(device)
 
         # title
-        data_title = [train_buy[i] for i in range(start_idx, end_idx)]
+        data_title = []
+        for i in range(start_idx, end_idx):
+            if i in train_buy:
+                data_title.append(train_buy[i])
+            else:
+                data_title.append([])
+        # data_title = [data_buy[i] for i in range(start_idx, end_idx)]
+        data_title_word = []
+        for i in data_title:
+            tmp = []
+            if not i:
+                tmp.append([0] * 100)
+            else:
+                for j in i:
+                    tmp.append(item_title[j].tolist())
+            data_title_word.append(tmp)
+        # data_title = [train_buy[i] for i in range(start_idx, end_idx)]
         data_title_word = []
         for i in data_title:
             tmp = []
@@ -216,7 +232,9 @@ def train():
         optimizer.zero_grad()
         # recon_batch, mu, logvar = model(data)
         recon_batch, std_list = model(data, data_title_mask)
+        # print(start_idx)
         loss = criterion(data, std_list, recon_batch, anneal)
+        # print(loss)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -237,7 +255,6 @@ def train():
 
             start_time = time.time()
             train_loss = 0.0
-        break
 
 
 def evaluate(data_tr, data_te, data_buy):
@@ -431,8 +448,8 @@ except KeyboardInterrupt:
     print('Exiting from training early')
 
 # Load the best saved model.
-# with open(args.save, 'rb') as f:
-#     model = torch.load(f)
+with open(args.save, 'rb') as f:
+    model = torch.load(f)
 
 # Run on test data.
 # test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
