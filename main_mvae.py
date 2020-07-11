@@ -250,10 +250,12 @@ def train():
                         epoch, batch_idx, len(range(0, N, args.batch_size)),
                         elapsed * 1000 / args.log_interval,
                         train_loss / args.log_interval))
-            for n,p in model.named_parameters():
-                if n == 'cores_title.weight' or n == 'cores.weight':
-                    print(n)
-                    print(p)
+            # for n,p in model.named_parameters():
+            #     if n == 'cores_title.weight' or n == 'cores.weight':
+            #         print(n)
+            #         print(p)
+            print(model.cores.weight)
+            print(model.cores_title.weight)
             # Log loss to tensorboard
             n_iter = (epoch - 1) * len(range(0, N, args.batch_size)) + batch_idx
             writer.add_scalars('data/loss', {'train': train_loss / args.log_interval}, n_iter)
