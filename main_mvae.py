@@ -251,7 +251,7 @@ def train():
                         elapsed * 1000 / args.log_interval,
                         train_loss / args.log_interval))
             for n,p in model.named_parameters():
-                if p.requires_grad and n == 'fc1_enc.weight':
+                if p.requires_grad and n == 'cores_title.weight':
                     print(n)
                     print(p)
             # Log loss to tensorboard
