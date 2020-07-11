@@ -238,7 +238,7 @@ def train():
         loss.backward()
         train_loss += loss.item()
         # we use gradient clipping to avoid exploding gradients
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
 
         update_count += 1
