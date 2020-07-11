@@ -250,8 +250,10 @@ def train():
                         epoch, batch_idx, len(range(0, N, args.batch_size)),
                         elapsed * 1000 / args.log_interval,
                         train_loss / args.log_interval))
-            for p in model.named_parameters():
-                print(p)
+            for n,p in model.named_parameters():
+                if p.requires_grad:
+                    print(n)
+                    print(p)
             # Log loss to tensorboard
             n_iter = (epoch - 1) * len(range(0, N, args.batch_size)) + batch_idx
             writer.add_scalars('data/loss', {'train': train_loss / args.log_interval}, n_iter)

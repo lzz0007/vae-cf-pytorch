@@ -56,11 +56,11 @@ class MultiVAE(nn.Module):
         self.fc31_enc = nn.Linear(256, 100)
         self.fc32_enc = nn.Linear(256, 100)
         # for title decoder
-        self.fc1_dec = nn.Linear(100, 128)
-        self.fc2_dec = nn.Linear(128, 128)
-        self.fc3_dec = nn.Linear(128, 128)
-        self.fc4_dec = nn.Linear(128, 17424)
-        self.swish = Swish()
+        # self.fc1_dec = nn.Linear(100, 128)
+        # self.fc2_dec = nn.Linear(128, 128)
+        # self.fc3_dec = nn.Linear(128, 128)
+        # self.fc4_dec = nn.Linear(128, 17424)
+        # self.swish = Swish()
 
         self.experts = ProductOfExperts()
 
