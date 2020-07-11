@@ -41,7 +41,7 @@ parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=10, metavar='N',
+parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
@@ -238,7 +238,7 @@ def train():
         loss.backward()
         train_loss += loss.item()
         # we use gradient clipping to avoid exploding gradients
-        # torch.nn.utils.clip_grad_norm(model.parameters(), 5)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
         optimizer.step()
 
         update_count += 1
@@ -254,7 +254,8 @@ def train():
             #     if n == 'cores_title.weight':
             #         print(n)
             #         print(p)
-            print(model.cores.grad)
+            # tmp = model.cores_title.grad
+            # print(tmp)
             # print(model.cores_title)
             # Log loss to tensorboard
             n_iter = (epoch - 1) * len(range(0, N, args.batch_size)) + batch_idx
