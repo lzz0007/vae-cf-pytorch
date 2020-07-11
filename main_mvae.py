@@ -25,7 +25,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='data/amazon',
                     help='Movielens-20m dataset location')
-parser.add_argument('--lr', type=float, default=1e-4,
+parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
 parser.add_argument('--wd', type=float, default=0.001,
                     help='weight decay coefficient')
@@ -237,6 +237,8 @@ def train():
         # print(loss)
         loss.backward()
         train_loss += loss.item()
+        # we use gradient clipping to avoid exploding gradients
+        # torch.nn.utils.clip_grad_norm(model.parameters(), 5)
         optimizer.step()
 
         update_count += 1
@@ -248,7 +250,8 @@ def train():
                         epoch, batch_idx, len(range(0, N, args.batch_size)),
                         elapsed * 1000 / args.log_interval,
                         train_loss / args.log_interval))
-
+            for p in model.named_parameters():
+                print(p)
             # Log loss to tensorboard
             n_iter = (epoch - 1) * len(range(0, N, args.batch_size)) + batch_idx
             writer.add_scalars('data/loss', {'train': train_loss / args.log_interval}, n_iter)
