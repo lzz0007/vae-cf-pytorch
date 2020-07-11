@@ -254,7 +254,7 @@ def train():
             #     if n == 'cores_title.weight' or n == 'cores.weight':
             #         print(n)
             #         print(p)
-            print(model.cores)
+            # print(model.cores)
             print(model.cores_title)
             # Log loss to tensorboard
             n_iter = (epoch - 1) * len(range(0, N, args.batch_size)) + batch_idx
