@@ -60,7 +60,7 @@ class MultiVAE(nn.Module):
         # self.fc2_dec = nn.Linear(128, 128)
         # self.fc3_dec = nn.Linear(128, 128)
         # self.fc4_dec = nn.Linear(128, 17424)
-        # self.swish = Swish()
+        self.swish = Swish()
 
         self.experts = ProductOfExperts()
 
