@@ -163,7 +163,7 @@ criterion = models_mvae.loss_function
 # TensorboardX Writer
 
 writer = SummaryWriter()
-
+decay_rate = 0.05
 def naive_sparse2tensor(data):
     return torch.FloatTensor(data.toarray())
 
@@ -171,6 +171,14 @@ def naive_sparse2tensor(data):
 def set_rng_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
+
+
+def adjust_learning_rate(optimizer, lr):
+    """
+    shrink learning rate
+    """
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
 
 
 def train():
@@ -231,17 +239,23 @@ def train():
         # model
         optimizer.zero_grad()
         # recon_batch, mu, logvar = model(data)
-        recon_batch, std_list = model(data, data_title_mask)
-        # print(start_idx)
-        loss = criterion(data, std_list, recon_batch, anneal)
-        # print(loss)
+        recon_batch_1, std_list_1 = model(data, data_title_mask)
+        loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None,recon_title=None)
+        recon_batch_2, std_list_2 = model(data, data_title=None)
+        loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
+        loss = loss_joint + loss_seq
         loss.backward()
         train_loss += loss.item()
+
         # we use gradient clipping to avoid exploding gradients
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
 
         update_count += 1
+
+        # Performing decay on the learning rate
+        if update_count % len(train_data) == 0:
+            adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * update_count / len(train_data)))
 
         if batch_idx % args.log_interval == 0 and batch_idx > 0:
             elapsed = time.time() - start_time

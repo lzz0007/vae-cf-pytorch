@@ -56,15 +56,15 @@ class MultiVAE(nn.Module):
         self.fc31_enc = nn.Linear(256, 100)
         self.fc32_enc = nn.Linear(256, 100)
         # for title decoder
-        # self.fc1_dec = nn.Linear(100, 128)
-        # self.fc2_dec = nn.Linear(128, 128)
-        # self.fc3_dec = nn.Linear(128, 128)
-        # self.fc4_dec = nn.Linear(128, 17424)
+        self.fc1_dec = nn.Linear(100, 128)
+        self.fc2_dec = nn.Linear(128, 128)
+        self.fc3_dec = nn.Linear(128, 128)
+        self.fc4_dec = nn.Linear(128, 102*100*17424)
         self.swish = Swish()
 
         self.experts = ProductOfExperts()
 
-    def forward(self, input, data_title=None):
+    def forward(self, input, data_title=None): # data_title: 100x102x100
         batch_size = input.shape[0]
 
         # clustering
@@ -82,7 +82,7 @@ class MultiVAE(nn.Module):
         cates_title = self.cate_softmax(cates_logits_title) # 100x102x7
 
         z_list = []
-        probs = None
+        probs, probs_title = None, None
         std_list = []
 
         for k in range(self.kfac):
@@ -119,9 +119,9 @@ class MultiVAE(nn.Module):
             probs = (probs_k if (probs is None) else (probs + probs_k))
 
             # title decoder
-            # title_k = self.title_decoder(z_k)
-            # title_k = title_k * cates_title
-            # probs_title = (title_k if (probs_title is None) else (probs_title + title_k))
+            # title_k = self.title_decoder(z_k).view(batch_size, 102, 100, -1) # 100x102x17424
+            # title_k = title_k * cates_k_t.unsqueeze(3) # 100x102x
+            # probs_title = (title_k if (probs_title is None) else (probs_title + title_k)) # 100x102x
 
             std_list.append(lnvarq_seq_k)
             if self.save_emb:
@@ -130,7 +130,7 @@ class MultiVAE(nn.Module):
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
 
-        return logits, std_list
+        return logits, std_list, probs_title
 
     def encode(self, input):
         h = F.normalize(input)
@@ -155,10 +155,10 @@ class MultiVAE(nn.Module):
         return self.fc31_enc(h), self.fc32_enc(h)
 
     def title_decoder(self, x):
-        h = self.swish(self.fc1(x))
-        h = self.swish(self.fc2(h))
-        h = self.swish(self.fc3(h))
-        return h
+        h = self.swish(self.fc1_dec(x))
+        h = self.swish(self.fc2_dec(h))
+        h = self.swish(self.fc3_dec(h))
+        return self.fc4_dec(h)
 
     def reparameterize(self, mu, std):
         if self.training:
@@ -261,7 +261,42 @@ class TitleDecoder(nn.Module):
         return self.fc4(h)
 
 
-def loss_function(x, std_list, recon_x, anneal=1.0):
+def binary_cross_entropy_with_logits(input, target):
+    """Sigmoid Activation + Binary Cross Entropy
+
+    @param input: torch.Tensor (size N)
+    @param target: torch.Tensor (size N)
+    @return loss: torch.Tensor (size N)
+    """
+    if not (target.size() == input.size()):
+        raise ValueError("Target size ({}) must be the same as input size ({})".format(
+            target.size(), input.size()))
+
+    return (torch.clamp(input, 0) - input * target
+            + torch.log(1 + torch.exp(-torch.abs(input))))
+
+
+def cross_entropy(input, target, eps=1e-6):
+    """k-Class Cross Entropy (Log Softmax + Log Loss)
+
+    @param input: torch.Tensor (size N x K)
+    @param target: torch.Tensor (size N x K)
+    @param eps: error to add (default: 1e-6)
+    @return loss: torch.Tensor (size N)
+    """
+    if not (target.size(0) == input.size(0)):
+        raise ValueError(
+            "Target size ({}) must be the same as input size ({})".format(
+                target.size(0), input.size(0)))
+
+    log_input = F.log_softmax(input + eps, dim=1)
+    y_onehot = Variable(log_input.data.new(log_input.size()).zero_())
+    y_onehot = y_onehot.scatter(1, target.unsqueeze(1), 1)
+    loss = y_onehot * log_input
+    return -loss
+
+
+def loss_function(x, std_list, recon_x, anneal, title, recon_title):
     # BCE = F.binary_cross_entropy(recon_x, x)
     # BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
     # KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
@@ -272,8 +307,11 @@ def loss_function(x, std_list, recon_x, anneal=1.0):
         kl_k = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
         kl = (kl_k if (kl is None) else (kl + kl_k))
     # neg_elbo = recon_loss + anneal * kl
+    recon_loss_title = None
+    if recon_title is not None:
+        recon_loss_title = torch.sum(cross_entropy(recon_title, title), dim=1)
 
-    return recon_loss + anneal * kl
+    return recon_loss + anneal * kl + recon_loss_title
 
 
 def prior_expert(size, use_cuda=False):
