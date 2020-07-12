@@ -307,7 +307,7 @@ def loss_function(x, std_list, recon_x, anneal, title, recon_title):
         kl_k = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
         kl = (kl_k if (kl is None) else (kl + kl_k))
     # neg_elbo = recon_loss + anneal * kl
-    recon_loss_title = None
+    recon_loss_title = 0
     if recon_title is not None:
         recon_loss_title = torch.sum(cross_entropy(recon_title, title), dim=1)
 
