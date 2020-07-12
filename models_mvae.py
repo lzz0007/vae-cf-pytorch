@@ -327,8 +327,9 @@ def prior_expert(size, use_cuda=False):
     mu     = Variable(torch.zeros(size))
     logvar = Variable(torch.zeros(size))
     # std = Variable(torch.zeros(size))
+    cuda = torch.device('cuda:2')
     if use_cuda:
-        mu, logvar = mu.cuda(), logvar.cuda()
+        mu, logvar = mu.cuda(cuda), logvar.cuda(cuda)
     return mu, logvar
 
 
