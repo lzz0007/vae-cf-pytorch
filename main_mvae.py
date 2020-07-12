@@ -20,7 +20,7 @@ from tqdm import tqdm
 import logging
 
 # torch.backends.cudnn.enabled = False
-os.environ["CUDA_VISIBLE_DEVICES"] = '2'
+# os.environ["CUDA_VISIBLE_DEVICES"] = '2'
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='data/amazon',
@@ -67,7 +67,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda" if args.cuda else "cpu")
+device = torch.device("cuda:2" if args.cuda else "cpu")
 
 logging.basicConfig(filename='train_logs_paper',
                             filemode='a',
