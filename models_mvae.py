@@ -55,11 +55,11 @@ class MultiVAE(nn.Module):
         self.fc2_enc = nn.Linear(256 * 100 * 102, 256)
         self.fc31_enc = nn.Linear(256, 100)
         self.fc32_enc = nn.Linear(256, 100)
-        # for title decoder
-        self.fc1_dec = nn.Linear(100, 128)
-        self.fc2_dec = nn.Linear(128, 128)
-        self.fc3_dec = nn.Linear(128, 128)
-        self.fc4_dec = nn.Linear(128, 102*100*17424)
+        # # for title decoder
+        # self.fc1_dec = nn.Linear(100, 128)
+        # self.fc2_dec = nn.Linear(128, 128)
+        # self.fc3_dec = nn.Linear(128, 128)
+        # self.fc4_dec = nn.Linear(128, 102*100*17424)
         self.swish = Swish()
 
         self.experts = ProductOfExperts()
@@ -130,7 +130,7 @@ class MultiVAE(nn.Module):
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
 
-        return logits, std_list, probs_title
+        return logits, std_list
 
     def encode(self, input):
         h = F.normalize(input)
