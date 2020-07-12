@@ -301,7 +301,6 @@ def loss_function(x, std_list, recon_x, anneal, title, recon_title):
     # BCE = F.binary_cross_entropy(recon_x, x)
     # BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
     # KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
-    print(recon_x)
     recon_loss = torch.mean(torch.sum(-F.log_softmax(recon_x, 1) * x, -1))
     kl = None
     for i in range(len(std_list)):
