@@ -254,7 +254,7 @@ def train():
         update_count += 1
 
         # Performing decay on the learning rate
-        if update_count % len(train_data) == 0:
+        if update_count % train_data.shape[0] == 0:
             adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * update_count / len(train_data)))
 
         if batch_idx % args.log_interval == 0 and batch_idx > 0:
