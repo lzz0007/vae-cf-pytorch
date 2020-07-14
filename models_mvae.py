@@ -89,7 +89,7 @@ class MultiVAE(nn.Module):
         for k in range(self.kfac):
             use_cuda = next(self.parameters()).is_cuda  # check if CUDA
             # initialize the universal prior expert
-            mu_k, std_k = prior_expert((1, batch_size, 100), use_cuda=use_cuda)
+            # mu_k, std_k = prior_expert((1, batch_size, 100), use_cuda=use_cuda)
 
             # for seq
             cates_k = cates[:, k].unsqueeze(0)  # 1x13015
@@ -98,18 +98,19 @@ class MultiVAE(nn.Module):
             # mu_k = torch.cat((mu_k, mu_seq_k.unsqueeze(0)), dim=0)  # 2x100x100
             # std_k = torch.cat((std_k, std_seq_k.unsqueeze(0)), dim=0)  # 2x100x100
 
-            # if data_title is not None:
-            #     cates_k_t = cates_title[:, :, k].unsqueeze(2)  # 100x102x1
-            #     title_k = title_emb * cates_k_t  # 100x102x51200
-            #     mu_title, std_title = self.title_encoder(title_k)  # 100x100
-            #     mu_k = torch.cat((mu_k, mu_title.unsqueeze(0)), dim=0)  # 3x100x100
-            #     std_k = torch.cat((std_k, std_title.unsqueeze(0)), dim=0)
-            #
-            # # product of gaussians
-            # mu_k, std_k = self.experts(mu_k, std_k)  # 100x100
+            if data_title is not None:
+                cates_k_t = cates_title[:, :, k].unsqueeze(2)  # 100x102x1
+                title_k = title_emb * cates_k_t  # 100x102x51200
+                mu_title, std_title = self.title_encoder(title_k)  # 100x100
+                mu_k = torch.cat((mu_seq_k.unsqueeze(0), mu_title.unsqueeze(0)), dim=0)  # 3x100x100
+                std_k = torch.cat((std_seq_k.unsqueeze(0), std_title.unsqueeze(0)), dim=0)
 
+                # product of gaussians
+                mu_k, std_k = self.experts(mu_k, std_k)  # 100x100
+            else:
+                mu_k, std_k = mu_seq_k, std_seq_k
             # zk embedding
-            z_k = self.reparameterize(mu_seq_k, std_seq_k)  # 100x100
+            z_k = self.reparameterize(mu_k, std_k)  # 100x100
 
             # seq decoder
             z_k = F.normalize(z_k)  # 100x100

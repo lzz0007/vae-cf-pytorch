@@ -240,12 +240,11 @@ def train():
 
         # model
         optimizer.zero_grad()
-        # recon_batch, mu, logvar = model(data)
-        # recon_batch_1, std_list_1 = model(data, data_title_mask)
-        # loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
+        recon_batch_1, std_list_1 = model(data, data_title_mask)
+        loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
         recon_batch_2, std_list_2 = model(data, data_title=None)
         loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-        loss = loss_seq
+        loss = loss_seq + loss_joint
         loss.backward()
         train_loss += loss.item()
 
@@ -338,17 +337,16 @@ def evaluate(data_tr, data_te, data_buy):
             else:
                 anneal = args.anneal_cap
 
-            # recon_batch, mu, logvar = model(data_tensor)
-            # recon_batch_1, std_list_1 = model(data_tensor, data_title_mask)
-            # loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
+            recon_batch_1, std_list_1 = model(data_tensor, data_title_mask)
+            loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
             recon_batch_2, std_list_2 = model(data_tensor, data_title=None)
             loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-            loss = loss_seq
+            loss = loss_seq + loss_joint
             total_loss += loss.item()
 
             # Exclude examples from training set
             # recon_batch = F.log_softmax(recon_batch, 1) # TODO: not sure
-            recon_batch = recon_batch_2
+            recon_batch = (recon_batch_2 + recon_batch_1)/2
             recon_batch = recon_batch.cpu().numpy()
             recon_batch[data.nonzero()] = -np.inf
 
