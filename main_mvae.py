@@ -259,11 +259,6 @@ def train():
 
         update_count += 1
 
-        # Performing decay on the learning rate
-        if update_count % train_data.shape[0] == 0:
-            adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * update_count / train_data.shape[0]))
-            for param_group in optimizer.param_groups:
-                print(param_group['lr'])
         if batch_idx % args.log_interval == 0 and batch_idx > 0:
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:4d}/{:4d} batches | ms/batch {:4.2f} | '
@@ -444,6 +439,11 @@ try:
         epoch_start_time = time.time()
         # train
         train()
+
+        # Performing decay on the learning rate
+        if epoch % 20 == 0:
+            adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * epoch / 20))
+
         # evaluate
         # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
