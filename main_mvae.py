@@ -146,6 +146,12 @@ hidden_dim = 100
 ###############################################################################
 # Build the model
 ###############################################################################
+# # kmeans for interaction data
+# kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
+# init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
+#
+# # kmeans for title
+# kmeans_t = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
 
 p_dims = [args.dfac, args.dfac, n_items]
 
@@ -256,7 +262,8 @@ def train():
         # Performing decay on the learning rate
         if update_count % train_data.shape[0] == 0:
             adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * update_count / train_data.shape[0]))
-
+            for param_group in optimizer.param_groups:
+                print(param_group['lr'])
         if batch_idx % args.log_interval == 0 and batch_idx > 0:
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:4d}/{:4d} batches | ms/batch {:4.2f} | '
