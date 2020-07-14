@@ -35,9 +35,9 @@ class MultiVAE(nn.Module):
         dfac = self.q_dims[-1]
         self.kfac = kfac
         num_items = self.q_dims[0]
-        self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
+        # self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
         self.items = nn.Parameter(torch.empty(num_items, dfac))
-        nn.init.xavier_normal_(self.cores.data)
+        # nn.init.xavier_normal_(self.cores.data)
         nn.init.xavier_normal_(self.items.data)
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
@@ -53,8 +53,8 @@ class MultiVAE(nn.Module):
         # for title encoder
         self.fc1_enc = nn.Embedding(17424, 256)
         self.fc2_enc = nn.Linear(256 * 100 * 102, 256)
-        self.fc31_enc = nn.Linear(256, 100)
-        self.fc32_enc = nn.Linear(256, 100)
+        self.fc31_enc = nn.Linear(256, dfac)
+        self.fc32_enc = nn.Linear(256, dfac)
         # # for title decoder
         # self.fc1_dec = nn.Linear(100, 128)
         # self.fc2_dec = nn.Linear(128, 128)
@@ -64,11 +64,12 @@ class MultiVAE(nn.Module):
 
         self.experts = ProductOfExperts()
 
-    def forward(self, input, data_title=None):  # data_title: 100x102x100
+    def forward(self, input, data_title=None, init_kmeans=None):  # data_title: 100x102x100
         batch_size = input.shape[0]
 
         # clustering
-        cores = F.normalize(self.cores)  # 7*100
+        # cores = F.normalize(self.cores)  # 7*100
+        cores = F.normalize(init_kmeans)
         items = F.normalize(self.items)  # 13015*100
 
         cates_logits = torch.mm(items, cores.t()) / self.tau  # 13015*7
@@ -87,7 +88,7 @@ class MultiVAE(nn.Module):
         std_list = []
 
         for k in range(self.kfac):
-            use_cuda = next(self.parameters()).is_cuda  # check if CUDA
+            # use_cuda = next(self.parameters()).is_cuda  # check if CUDA
             # initialize the universal prior expert
             # mu_k, std_k = prior_expert((1, batch_size, 100), use_cuda=use_cuda)
 

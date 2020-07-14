@@ -147,13 +147,13 @@ hidden_dim = 100
 # Build the model
 ###############################################################################
 # # kmeans for interaction data
-# kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
-# init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
-#
+kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
+init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
+
 # # kmeans for title
 # kmeans_t = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
 
-p_dims = [args.dfac, args.dfac, n_items]
+p_dims = [N, args.dfac, n_items]
 
 model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac,
                              nogb=args.nogb).to(device)
@@ -245,7 +245,7 @@ def train():
 
         # model
         optimizer.zero_grad()
-        recon_batch_1, std_list_1 = model(data, data_title_mask)
+        recon_batch_1, std_list_1 = model(data, data_title_mask, init_kmeans)
         loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
         recon_batch_2, std_list_2 = model(data, data_title=None)
         loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
