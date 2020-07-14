@@ -48,7 +48,7 @@ class MultiVAE(nn.Module):
         self.init_weights()
 
         # center for title
-        self.cores_title = nn.Parameter(torch.empty(self.kfac, 100*256))
+        self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * 256))
         nn.init.xavier_normal_(self.cores_title.data)
         # for title encoder
         self.fc1_enc = nn.Embedding(17424, 256)
@@ -64,23 +64,23 @@ class MultiVAE(nn.Module):
 
         self.experts = ProductOfExperts()
 
-    def forward(self, input, data_title=None): # data_title: 100x102x100
+    def forward(self, input, data_title=None):  # data_title: 100x102x100
         batch_size = input.shape[0]
 
         # clustering
-        cores = F.normalize(self.cores) # 7*100
-        items = F.normalize(self.items) # 13015*100
+        cores = F.normalize(self.cores)  # 7*100
+        items = F.normalize(self.items)  # 13015*100
 
-        cates_logits = torch.mm(items, cores.t()) / self.tau # 13015*7
-        cates = self.cate_softmax(cates_logits) # 13015x7
+        cates_logits = torch.mm(items, cores.t()) / self.tau  # 13015*7
+        cates = self.cate_softmax(cates_logits)  # 13015x7
 
         if data_title is not None:
             # print(torch.max(data_title))
-            title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1) # 100x102x51200
+            title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1)  # 100x102x51200
             title_emb = F.normalize(title_emb)
             cores_title = F.normalize(self.cores_title)
-            cates_logits_title = title_emb.matmul(cores_title.t())/self.tau # 100x102x7
-            cates_title = self.cate_softmax(cates_logits_title) # 100x102x7
+            cates_logits_title = title_emb.matmul(cores_title.t()) / self.tau  # 100x102x7
+            cates_title = self.cate_softmax(cates_logits_title)  # 100x102x7
 
         z_list = []
         probs, probs_title = None, None
@@ -92,31 +92,30 @@ class MultiVAE(nn.Module):
             mu_k, std_k = prior_expert((1, batch_size, 100), use_cuda=use_cuda)
 
             # for seq
-            cates_k = cates[:, k].unsqueeze(0) # 1x13015
-            x_k = input * cates_k # 100x13015
-            mu_seq_k, std_seq_k, lnvarq_seq_k = self.encode(x_k) # 100x100
-            mu_k = torch.cat((mu_k, mu_seq_k.unsqueeze(0)), dim=0) # 2x100x100
-            std_k = torch.cat((std_k, std_seq_k.unsqueeze(0)), dim=0) # 2x100x100
+            cates_k = cates[:, k].unsqueeze(0)  # 1x13015
+            x_k = input * cates_k  # 100x13015
+            mu_seq_k, std_seq_k, lnvarq_seq_k = self.encode(x_k)  # 100x100
+            # mu_k = torch.cat((mu_k, mu_seq_k.unsqueeze(0)), dim=0)  # 2x100x100
+            # std_k = torch.cat((std_k, std_seq_k.unsqueeze(0)), dim=0)  # 2x100x100
 
-            if data_title is not None:
-                cates_k_t = cates_title[:, :, k].unsqueeze(2) # 100x102x1
-                title_k = title_emb * cates_k_t # 100x102x51200
-                mu_title, std_title = self.title_encoder(title_k) # 100x100
-                mu_k = torch.cat((mu_k, mu_title.unsqueeze(0)), dim=0) # 3x100x100
-                std_k = torch.cat((std_k, std_title.unsqueeze(0)), dim=0)
-
-            # product of gaussians
-            mu_k, std_k = self.experts(mu_k, std_k) # 100x100
+            # if data_title is not None:
+            #     cates_k_t = cates_title[:, :, k].unsqueeze(2)  # 100x102x1
+            #     title_k = title_emb * cates_k_t  # 100x102x51200
+            #     mu_title, std_title = self.title_encoder(title_k)  # 100x100
+            #     mu_k = torch.cat((mu_k, mu_title.unsqueeze(0)), dim=0)  # 3x100x100
+            #     std_k = torch.cat((std_k, std_title.unsqueeze(0)), dim=0)
+            #
+            # # product of gaussians
+            # mu_k, std_k = self.experts(mu_k, std_k)  # 100x100
 
             # zk embedding
-            z_k = self.reparameterize(mu_k, std_k) # 100x100
-
+            z_k = self.reparameterize(mu_seq_k, std_seq_k)  # 100x100
 
             # seq decoder
-            z_k = F.normalize(z_k) # 100x100
-            logits_k = torch.mm(z_k, items.t()) / self.tau # 100x13015
+            z_k = F.normalize(z_k)  # 100x100
+            logits_k = torch.mm(z_k, items.t()) / self.tau  # 100x13015
             probs_k = torch.exp(logits_k)
-            probs_k = probs_k * cates_k # 100x13015
+            probs_k = probs_k * cates_k  # 100x13015
             probs = (probs_k if (probs is None) else (probs + probs_k))
 
             # title decoder
@@ -216,6 +215,7 @@ class MultiVAE(nn.Module):
 
 class Swish(nn.Module):
     """https://arxiv.org/abs/1710.05941"""
+
     def forward(self, x):
         return x * torch.sigmoid(x)
 
@@ -226,10 +226,11 @@ class TitleEncoder(nn.Module):
     @param n_latents: integer
                       number of latent dimensions
     """
+
     def __init__(self, n_latents):
         super(TitleEncoder, self).__init__()
         self.fc1 = nn.Embedding(17424, 512)
-        self.fc2 = nn.Linear(512*100*102, 512)
+        self.fc2 = nn.Linear(512 * 100 * 102, 512)
         self.fc31 = nn.Linear(512, n_latents)
         self.fc32 = nn.Linear(512, n_latents)
         self.swish = Swish()
@@ -247,6 +248,7 @@ class TitleDecoder(nn.Module):
     @param n_latents: integer
                       number of latent dimensions
     """
+
     def __init__(self, n_latents):
         super(TitleDecoder, self).__init__()
         self.fc1 = nn.Linear(n_latents, 512)
@@ -324,7 +326,7 @@ def prior_expert(size, use_cuda=False):
     @param use_cuda: boolean [default: False]
                      cast CUDA on variables
     """
-    mu     = Variable(torch.zeros(size))
+    mu = Variable(torch.zeros(size))
     logvar = Variable(torch.zeros(size))
     # std = Variable(torch.zeros(size))
     cuda = torch.device('cuda:2')
@@ -341,10 +343,10 @@ class ProductOfExperts(nn.Module):
     @param logvar: M x D for M experts
     """
     def forward(self, mu, logvar, eps=1e-8):
-        var       = torch.exp(logvar) + eps
+        var = torch.exp(logvar) + eps
         # precision of i-th Gaussian expert at point x
-        T         = 1. / (var + eps)
-        pd_mu     = torch.sum(mu * T, dim=0) / torch.sum(T, dim=0)
-        pd_var    = 1. / torch.sum(T, dim=0)
+        T = 1. / (var + eps)
+        pd_mu = torch.sum(mu * T, dim=0) / torch.sum(T, dim=0)
+        pd_var = 1. / torch.sum(T, dim=0)
         pd_logvar = torch.log(pd_var + eps)
         return pd_mu, pd_logvar
