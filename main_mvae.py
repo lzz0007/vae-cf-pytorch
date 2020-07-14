@@ -125,7 +125,7 @@ item2index = dataset['item2index']
 category_id = np.array(dataset['category_id'])
 item_title = dataset['meta_titles']
 
-max_item = max([len(v) for k,v in train_buy.items()])
+max_item = max([len(v) for k, v in train_buy.items()])
 max_word = 100
 # embeddings = torch.load('embeddings.pt')
 
@@ -164,6 +164,8 @@ criterion = models_mvae.loss_function
 
 writer = SummaryWriter()
 decay_rate = 0.05
+
+
 def naive_sparse2tensor(data):
     return torch.FloatTensor(data.toarray())
 
@@ -226,7 +228,7 @@ def train():
         # max_item = max([len(i) for i in data_title])
         data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
         for i, c in enumerate(data_title_word):
-            data_title_mask[i,:len(c),:] = c
+            data_title_mask[i, :len(c), :] = c
         data_title_mask = torch.LongTensor(data_title_mask).to(device)
 
         # anneal
@@ -239,11 +241,11 @@ def train():
         # model
         optimizer.zero_grad()
         # recon_batch, mu, logvar = model(data)
-        recon_batch_1, std_list_1 = model(data, data_title_mask)
-        loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None,recon_title=None)
+        # recon_batch_1, std_list_1 = model(data, data_title_mask)
+        # loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
         recon_batch_2, std_list_2 = model(data, data_title=None)
         loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-        loss = loss_joint + loss_seq
+        loss = loss_seq
         loss.backward()
         train_loss += loss.item()
 
