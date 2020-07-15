@@ -261,7 +261,7 @@ print('no of clusters:', kfac)
 # # kmeans for title
 # kmeans_t = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
 
-p_dims = [N, args.dfac, n_items]
+p_dims = [args.dfac, args.dfac, n_items]
 
 model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
                              nogb=args.nogb).to(device)
