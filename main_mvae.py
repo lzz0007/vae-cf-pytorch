@@ -248,7 +248,7 @@ def train():
         optimizer.zero_grad()
         recon_batch_1, std_list_1 = model(data, data_title_mask, init_kmeans=init_kmeans)
         loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-        recon_batch_2, std_list_2 = model(data, data_title=None)
+        recon_batch_2, std_list_2 = model(data, data_title=None, init_kmeans=init_kmeans)
         loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
         loss = loss_seq + loss_joint
         loss.backward()
