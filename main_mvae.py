@@ -148,7 +148,7 @@ hidden_dim = 100
 ###############################################################################
 # # kmeans for interaction data
 kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
-init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
+init_kmeans = torch.FloatTensor(kmeans.cluster_centers_).to(device)
 
 # # kmeans for title
 # kmeans_t = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
