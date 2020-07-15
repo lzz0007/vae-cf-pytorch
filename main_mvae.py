@@ -149,6 +149,7 @@ hidden_dim = 100
 # # kmeans for interaction data
 kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
 init_kmeans = torch.FloatTensor(kmeans.cluster_centers_).to(device)
+init_kmeans = F.normalize(init_kmeans)
 
 # # kmeans for title
 # kmeans_t = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
@@ -245,7 +246,7 @@ def train():
 
         # model
         optimizer.zero_grad()
-        recon_batch_1, std_list_1 = model(data, data_title_mask, init_kmeans)
+        recon_batch_1, std_list_1 = model(data, data_title_mask, init_kmeans=init_kmeans)
         loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
         recon_batch_2, std_list_2 = model(data, data_title=None)
         loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)

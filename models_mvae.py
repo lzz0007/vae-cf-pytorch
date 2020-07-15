@@ -69,7 +69,7 @@ class MultiVAE(nn.Module):
 
         # clustering
         # cores = F.normalize(self.cores)  # 7*100
-        cores = F.normalize(init_kmeans)
+        cores = init_kmeans
         items = F.normalize(self.items)  # 13015*100
 
         cates_logits = torch.mm(items, cores.t()) / self.tau  # 13015*7
