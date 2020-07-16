@@ -203,16 +203,16 @@ class MultiVAE(nn.Module):
             # Normal Initialization for Biases
             layer.bias.data.normal_(0.0, 0.001)
 
-        for layer in self.p_layers:
-            # Xavier Initialization for weights
-            size = layer.weight.size()
-            fan_out = size[0]
-            fan_in = size[1]
-            std = np.sqrt(2.0 / (fan_in + fan_out))
-            layer.weight.data.normal_(0.0, std)
-
-            # Normal Initialization for Biases
-            layer.bias.data.normal_(0.0, 0.001)
+        # for layer in self.p_layers:
+        #     # Xavier Initialization for weights
+        #     size = layer.weight.size()
+        #     fan_out = size[0]
+        #     fan_in = size[1]
+        #     std = np.sqrt(2.0 / (fan_in + fan_out))
+        #     layer.weight.data.normal_(0.0, std)
+        #
+        #     # Normal Initialization for Biases
+        #     layer.bias.data.normal_(0.0, 0.001)
 
 
 class Swish(nn.Module):
@@ -222,65 +222,65 @@ class Swish(nn.Module):
         return x * torch.sigmoid(x)
 
 
-class TitleEncoder(nn.Module):
-    """Parametrizes q(z|y).
-
-    @param n_latents: integer
-                      number of latent dimensions
-    """
-
-    def __init__(self, n_latents):
-        super(TitleEncoder, self).__init__()
-        self.fc1 = nn.Embedding(17424, 512)
-        self.fc2 = nn.Linear(512 * 100 * 102, 512)
-        self.fc31 = nn.Linear(512, n_latents)
-        self.fc32 = nn.Linear(512, n_latents)
-        self.swish = Swish()
-
-    def forward(self, x):
-        h = self.fc1(x).view(x.shape[0], -1)
-        h = self.swish(h)
-        h = self.swish(self.fc2(h))
-        return self.fc31(h), self.fc32(h)
-
-
-class TitleDecoder(nn.Module):
-    """Parametrizes p(y|z).
-
-    @param n_latents: integer
-                      number of latent dimensions
-    """
-
-    def __init__(self, n_latents):
-        super(TitleDecoder, self).__init__()
-        self.fc1 = nn.Linear(n_latents, 512)
-        self.fc2 = nn.Linear(512, 512)
-        self.fc3 = nn.Linear(512, 512)
-        self.fc4 = nn.Linear(512, 10)
-        self.swish = Swish()
-
-    def forward(self, z):
-        h = self.swish(self.fc1(z))
-        h = self.swish(self.fc2(h))
-        h = self.swish(self.fc3(h))
-        return self.fc4(h)
-
-
-def binary_cross_entropy_with_logits(input, target):
-    """Sigmoid Activation + Binary Cross Entropy
-
-    @param input: torch.Tensor (size N)
-    @param target: torch.Tensor (size N)
-    @return loss: torch.Tensor (size N)
-    """
-    if not (target.size() == input.size()):
-        raise ValueError("Target size ({}) must be the same as input size ({})".format(
-            target.size(), input.size()))
-
-    return (torch.clamp(input, 0) - input * target
-            + torch.log(1 + torch.exp(-torch.abs(input))))
+# class TitleEncoder(nn.Module):
+#     """Parametrizes q(z|y).
+#
+#     @param n_latents: integer
+#                       number of latent dimensions
+#     """
+#
+#     def __init__(self, n_latents):
+#         super(TitleEncoder, self).__init__()
+#         self.fc1 = nn.Embedding(17424, 512)
+#         self.fc2 = nn.Linear(512 * 100 * 102, 512)
+#         self.fc31 = nn.Linear(512, n_latents)
+#         self.fc32 = nn.Linear(512, n_latents)
+#         self.swish = Swish()
+#
+#     def forward(self, x):
+#         h = self.fc1(x).view(x.shape[0], -1)
+#         h = self.swish(h)
+#         h = self.swish(self.fc2(h))
+#         return self.fc31(h), self.fc32(h)
+#
+#
+# class TitleDecoder(nn.Module):
+#     """Parametrizes p(y|z).
+#
+#     @param n_latents: integer
+#                       number of latent dimensions
+#     """
+#
+#     def __init__(self, n_latents):
+#         super(TitleDecoder, self).__init__()
+#         self.fc1 = nn.Linear(n_latents, 512)
+#         self.fc2 = nn.Linear(512, 512)
+#         self.fc3 = nn.Linear(512, 512)
+#         self.fc4 = nn.Linear(512, 10)
+#         self.swish = Swish()
+#
+#     def forward(self, z):
+#         h = self.swish(self.fc1(z))
+#         h = self.swish(self.fc2(h))
+#         h = self.swish(self.fc3(h))
+#         return self.fc4(h)
 
 
+# def binary_cross_entropy_with_logits(input, target):
+#     """Sigmoid Activation + Binary Cross Entropy
+#
+#     @param input: torch.Tensor (size N)
+#     @param target: torch.Tensor (size N)
+#     @return loss: torch.Tensor (size N)
+#     """
+#     if not (target.size() == input.size()):
+#         raise ValueError("Target size ({}) must be the same as input size ({})".format(
+#             target.size(), input.size()))
+#
+#     return (torch.clamp(input, 0) - input * target
+#             + torch.log(1 + torch.exp(-torch.abs(input))))
+#
+#
 def cross_entropy(input, target, eps=1e-6):
     """k-Class Cross Entropy (Log Softmax + Log Loss)
 
@@ -319,22 +319,22 @@ def loss_function(x, std_list, recon_x, anneal, title, recon_title):
     return recon_loss + anneal * kl + recon_loss_title
 
 
-def prior_expert(size, use_cuda=False):
-    """Universal prior expert. Here we use a spherical
-    Gaussian: N(0, 1).
-
-    @param size: integer
-                 dimensionality of Gaussian
-    @param use_cuda: boolean [default: False]
-                     cast CUDA on variables
-    """
-    mu = Variable(torch.zeros(size))
-    logvar = Variable(torch.zeros(size))
-    # std = Variable(torch.zeros(size))
-    cuda = torch.device('cuda:2')
-    if use_cuda:
-        mu, logvar = mu.cuda(cuda), logvar.cuda(cuda)
-    return mu, logvar
+# def prior_expert(size, use_cuda=False):
+#     """Universal prior expert. Here we use a spherical
+#     Gaussian: N(0, 1).
+#
+#     @param size: integer
+#                  dimensionality of Gaussian
+#     @param use_cuda: boolean [default: False]
+#                      cast CUDA on variables
+#     """
+#     mu = Variable(torch.zeros(size))
+#     logvar = Variable(torch.zeros(size))
+#     # std = Variable(torch.zeros(size))
+#     cuda = torch.device('cuda:2')
+#     if use_cuda:
+#         mu, logvar = mu.cuda(cuda), logvar.cuda(cuda)
+#     return mu, logvar
 
 
 class ProductOfExperts(nn.Module):
