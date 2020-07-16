@@ -46,15 +46,15 @@ class MultiVAE(nn.Module):
 
         self.drop = nn.Dropout(dropout)
         self.init_weights()
-
+        hidden_dim = 128
         # center for title
-        self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * 256))
+        self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * hidden_dim))
         nn.init.xavier_normal_(self.cores_title.data)
         # for title encoder
-        self.fc1_enc = nn.Embedding(17424, 256)
-        self.fc2_enc = nn.Linear(256 * 100 * 102, 256)
-        self.fc31_enc = nn.Linear(256, dfac)
-        self.fc32_enc = nn.Linear(256, dfac)
+        self.fc1_enc = nn.Embedding(17424, hidden_dim)
+        self.fc2_enc = nn.Linear(hidden_dim * 100 * 102, hidden_dim)
+        self.fc31_enc = nn.Linear(hidden_dim, dfac)
+        self.fc32_enc = nn.Linear(hidden_dim, dfac)
         # # for title decoder
         # self.fc1_dec = nn.Linear(100, 128)
         # self.fc2_dec = nn.Linear(128, 128)

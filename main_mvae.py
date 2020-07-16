@@ -190,7 +190,7 @@ PCA_components = pd.DataFrame(principalComponents)
 # plt.ylim(-50, 100)
 # plt.show()
 
-from sklearn_extra.cluster import KMedoids
+from k_medoid import KMedoids
 print('start doing Kmedoids')
 kmedoids = KMedoids(n_clusters=6, random_state=0).fit(PCA_components)
 print(Counter(kmedoids.labels_).keys())
@@ -198,7 +198,7 @@ print(Counter(kmedoids.labels_).values())
 kmedoids_center = kmedoids.cluster_centers_
 labels = np.array(list(set(kmedoids.labels_)))
 kmedoids_center = kmedoids_center[labels]
-kmedoids_center = torch.FloatTensor(kmedoids_center)
+kmedoids_center = torch.FloatTensor(kmedoids_center).to(device)
 kfac = len(labels)
 print('no of clusters:', kfac)
 
@@ -446,9 +446,9 @@ def evaluate(data_tr, data_te, data_buy):
             else:
                 anneal = args.anneal_cap
 
-            recon_batch_1, std_list_1 = model(data_tensor, data_title_mask)
+            recon_batch_1, std_list_1 = model(data_tensor, data_title_mask, kmedoids_center)
             loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-            recon_batch_2, std_list_2 = model(data_tensor, data_title=None)
+            recon_batch_2, std_list_2 = model(data_tensor, None, kmedoids_center)
             loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_seq + loss_joint
             total_loss += loss.item()
