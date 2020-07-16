@@ -357,13 +357,13 @@ def train():
         optimizer.zero_grad()
 
         if args.mvae:
-            recon_batch_1, std_list_1 = model(data, data_title_mask)
+            recon_batch_1, std_list_1 = model(data, data_title_mask, kmedoids_center)
             loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-            recon_batch_2, std_list_2 = model(data, data_title=None)
+            recon_batch_2, std_list_2 = model(data, None, kmedoids_center)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_joint + loss_seq
         else:
-            recon_batch_2, std_list_2 = model(data, data_title=None)
+            recon_batch_2, std_list_2 = model(data, None, kmedoids_center)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_seq
 
@@ -456,14 +456,14 @@ def evaluate(data_tr, data_te, data_buy):
                 anneal = args.anneal_cap
 
             if args.mvae:
-                recon_batch_1, std_list_1 = model(data_tensor, data_title_mask)
+                recon_batch_1, std_list_1 = model(data_tensor, data_title_mask, kmedoids_center)
                 loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-                recon_batch_2, std_list_2 = model(data_tensor, data_title=None)
+                recon_batch_2, std_list_2 = model(data_tensor, None, kmedoids_center)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_joint + loss_seq
                 recon_batch = (recon_batch_2 + recon_batch_1) / 2
             else:
-                recon_batch_2, std_list_2 = model(data_tensor, data_title=None)
+                recon_batch_2, std_list_2 = model(data_tensor, None, kmedoids_center)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_seq
                 recon_batch = recon_batch_2
