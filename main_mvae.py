@@ -43,7 +43,7 @@ parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=1, metavar='N',
+parser.add_argument('--log-interval', type=int, default=80, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
@@ -59,7 +59,7 @@ parser.add_argument('--dfac', type=int, default=100,
                     help='Dimension of each facet.')
 parser.add_argument('--nogb', action='store_true', default=False,
                     help='Disable Gumbel-Softmax sampling.')
-parser.add_argument('--mvae', action='store_true', default=False,
+parser.add_argument('--mvae', action='store_true', default=True,
                     help='whether to run mvae.')
 # args = parser.parse_args()
 args = parser.parse_known_args()
@@ -99,74 +99,7 @@ num_batches = int(np.ceil(float(N) / args.batch_size))
 total_anneal_steps = 5 * num_batches
 
 ###############################################################################
-# load item title
-###############################################################################
-# with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
-#     dataset = pickle.load(f)
-#
-# item_title = dataset['data']
-# vocab2index = dataset['vocab2index']
-# cat2index = dataset['cat2index']
-# with open(os.path.join(args.data, 'pro_sg/unique_sid.txt'), "r") as f:
-#     unique_sid = []
-#     for l in f:
-#         unique_sid.append(l.rstrip("\n"))
-#
-# # filter items
-# item_title = item_title[item_title['asin'].isin(unique_sid)]
-# titles = []
-# for i in range(len(item_title)):
-#     titles.append(item_title['encoded'].iloc[i][0])
-# titles = np.array(titles)
-
-with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
-    dataset = pickle.load(f)
-
-item_mat = dataset['meta_mat']
-vocab2index = dataset['vocab2index']
-cat2index = dataset['cat2index']
-item2index = dataset['item2index']
-category_id = np.array(dataset['category_id'])
-item_title = dataset['meta_titles']
-
-max_item = max([len(v) for k, v in train_buy.items()])
-max_word = 100
-# embeddings = torch.load('embeddings.pt')
-
-# # load pretrained word embeddings
-# import codecs
-# all_word_embeds = {}
-# for i, line in enumerate(codecs.open('data/glove.6B.100d.txt', 'r', 'utf-8')):
-#     s = line.strip().split()
-#     if len(s) == args.dfac + 1:
-#         all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
-#
-# # Intializing Word Embedding Matrix
-# word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(vocab2index), args.dfac))
-# for w in vocab2index:
-#     if w in all_word_embeds:
-#         word_embeds[vocab2index[w]] = all_word_embeds[w]
-#     elif w.lower() in all_word_embeds:
-#         word_embeds[vocab2index[w]] = all_word_embeds[w.lower()]
-# item_title
-# print('Loaded %i pretrained embeddings.' % len(all_word_embeds))
-# kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(embeddings)
-# init_kmeans = torch.FloatTensor(kmeans.cluster_centers_)
-
-# titles = torch.from_numpy(embeddings).float().contiguous().to(device)
-
-# define parameters for titles
-embedding_dim = 100
-hidden_dim = 100
-
-###############################################################################
-# load image
-###############################################################################
-# img_features_filtered = torch.load('images_filtered.pt')
-# img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguous().to(device)
-
-###############################################################################
-# Build the model
+# kmeans for interaction data
 ###############################################################################
 from collections import Counter
 # Standardize the data to have a mean of ~0 and a variance of 1
@@ -200,7 +133,7 @@ print(Counter(kmedoids.labels_).values())
 kmedoids_center = kmedoids.cluster_centers_
 labels = np.array(list(set(kmedoids.labels_)))
 kmedoids_center = kmedoids_center[labels]
-kmedoids_center = torch.FloatTensor(kmedoids_center).to(device)
+centers = torch.FloatTensor(kmedoids_center).to(device)
 kfac = len(labels)
 print('no of clusters:', kfac)
 
@@ -260,13 +193,95 @@ print('no of clusters:', kfac)
 # init_kmeans = torch.FloatTensor(kmeans.cluster_centers_).to(device)
 # init_kmeans = F.normalize(init_kmeans)
 
-# # kmeans for title
-# kmeans_t = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
+###############################################################################
+# load item title
+###############################################################################
+# with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
+#     dataset = pickle.load(f)
+#
+# item_title = dataset['data']
+# vocab2index = dataset['vocab2index']
+# cat2index = dataset['cat2index']
+# with open(os.path.join(args.data, 'pro_sg/unique_sid.txt'), "r") as f:
+#     unique_sid = []
+#     for l in f:
+#         unique_sid.append(l.rstrip("\n"))
+#
+# # filter items
+# item_title = item_title[item_title['asin'].isin(unique_sid)]
+# titles = []
+# for i in range(len(item_title)):
+#     titles.append(item_title['encoded'].iloc[i][0])
+# titles = np.array(titles)
+
+with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
+    dataset = pickle.load(f)
+
+item_mat = dataset['meta_mat']
+vocab2index = dataset['vocab2index']
+cat2index = dataset['cat2index']
+item2index = dataset['item2index']
+category_id = np.array(dataset['category_id'])
+item_title = dataset['meta_titles']
+
+max_item = max([len(v) for k, v in train_buy.items()])
+max_word = 100
+# embeddings = torch.load('embeddings.pt')
+
+# load pretrained word embeddings
+if args.mvae:
+    import codecs
+    all_word_embeds = {}
+    for i, line in enumerate(codecs.open('data/glove.6B.100d.txt', 'r', 'utf-8')):
+        s = line.strip().split()
+        if len(s) == args.dfac + 1:
+            all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
+
+    # Intializing Word Embedding Matrix
+    word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(vocab2index), args.dfac))
+    for w in vocab2index:
+        if w in all_word_embeds:
+            word_embeds[vocab2index[w]] = all_word_embeds[w]
+        elif w.lower() in all_word_embeds:
+            word_embeds[vocab2index[w]] = all_word_embeds[w.lower()]
+
+    print('Loaded %i pretrained embeddings.' % len(word_embeds))
+    del all_word_embeds
+
+    title_emb = np.zeros((len(item_title), max_word, 100))
+    for k, v in item_title.items():
+        for i, idx in enumerate(v):
+            title_emb[k, i, :] = word_embeds[idx, :]
+
+    title_emb_reshape = title_emb.reshape(len(item_title), max_word*100)
+    kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb_reshape)
+    centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device)
+else:
+    centers_title = None
+# titles = torch.from_numpy(embeddings).float().contiguous().to(device)
+
+# define parameters for titles
+embedding_dim = 100
+hidden_dim = 100
+
+###############################################################################
+# load image
+###############################################################################
+# img_features_filtered = torch.load('images_filtered.pt')
+# img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguous().to(device)
+
+###############################################################################
+# Build the model
+###############################################################################
 
 p_dims = [args.dfac, args.dfac, n_items]
 
-model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                             nogb=args.nogb).to(device)
+if args.mvae:
+    model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
+                                 nogb=args.nogb, pre_word_embeds=word_embeds).to(device)
+else:
+    model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
+                                 nogb=args.nogb, pre_word_embeds=None).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 criterion = models_mvae.loss_function
@@ -298,7 +313,7 @@ def adjust_learning_rate(optimizer, lr):
         param_group['lr'] = lr
 
 
-def train():
+def train(centers, centers_title):
     set_rng_seed(args.seed)
 
     # Turn on training mode
@@ -319,12 +334,12 @@ def train():
         # title
         data_title = []
         for i in range(start_idx, end_idx):
-            if i in train_buy:
+            if i in train_buy: # what items did the user purchase
                 data_title.append(train_buy[i])
             else:
                 data_title.append([])
         # data_title = [data_buy[i] for i in range(start_idx, end_idx)]
-        data_title_word = []
+        data_title_word = [] # word index that each item has
         for i in data_title:
             tmp = []
             if not i:
@@ -334,13 +349,12 @@ def train():
                     tmp.append(item_title[j].tolist())
             data_title_word.append(tmp)
         # data_title = [train_buy[i] for i in range(start_idx, end_idx)]
-        data_title_word = []
-        for i in data_title:
-            tmp = []
-            for j in i:
-                tmp.append(item_title[j].tolist())
-            data_title_word.append(tmp)
-        # max_item = max([len(i) for i in data_title])
+
+        # title_emb_reshape.shape
+        # data_title_mask = np.zeros((len(data_title), max_item, title_emb_reshape.shape[1]), dtype=int)
+        # for i, items in enumerate(data_title):
+        #     for j, item in enumerate(items):
+        #         data_title_mask[i, j, :] = title_emb_reshape[item]
         data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
         for i, c in enumerate(data_title_word):
             data_title_mask[i, :len(c), :] = c
@@ -357,13 +371,14 @@ def train():
         optimizer.zero_grad()
 
         if args.mvae:
-            recon_batch_1, std_list_1 = model(data, data_title_mask, kmedoids_center)
+            recon_batch_1, std_list_1, items, titles = model(data, data_title_mask, centers, centers_title)
             loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-            recon_batch_2, std_list_2 = model(data, None, kmedoids_center)
+            recon_batch_2, std_list_2, _, _ = model(data, None, centers, centers_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_joint + loss_seq
+            # loss = loss_joint
         else:
-            recon_batch_2, std_list_2 = model(data, None, kmedoids_center)
+            recon_batch_2, std_list_2, items, titles = model(data, None, centers, centers_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_seq
 
@@ -396,9 +411,10 @@ def train():
 
             start_time = time.time()
             train_loss = 0.0
+    return items, titles
 
 
-def evaluate(data_tr, data_te, data_buy):
+def evaluate(data_tr, data_te, data_buy, centers, centers_title):
     # data_tr = vad_data_tr
     # data_te = vad_data_te
     # data_buy = vad_buy
@@ -456,14 +472,16 @@ def evaluate(data_tr, data_te, data_buy):
                 anneal = args.anneal_cap
 
             if args.mvae:
-                recon_batch_1, std_list_1 = model(data_tensor, data_title_mask, kmedoids_center)
+                recon_batch_1, std_list_1, _, _ = model(data_tensor, data_title_mask, centers, centers_title)
                 loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-                recon_batch_2, std_list_2 = model(data_tensor, None, kmedoids_center)
+                recon_batch_2, std_list_2, _ = model(data_tensor, None, centers, None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_joint + loss_seq
                 recon_batch = (recon_batch_2 + recon_batch_1) / 2
+                # loss = loss_joint
+                # recon_batch = recon_batch_1
             else:
-                recon_batch_2, std_list_2 = model(data_tensor, None, kmedoids_center)
+                recon_batch_2, std_list_2, _, _ = model(data_tensor, None, centers, centers_title=None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_seq
                 recon_batch = recon_batch_2
@@ -562,7 +580,7 @@ try:
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
-        train()
+        items, titles = train(centers, centers_title)
 
         # Performing decay on the learning rate
         if epoch % 20 == 0:
@@ -570,8 +588,14 @@ try:
 
         # evaluate
         # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
-        val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te, vad_buy)
+        if args.mvae:
+            val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te, vad_buy,
+                                                                         centers, centers_title)
+        else:
+            val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te, vad_buy,
+                                                                         centers, None)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
@@ -598,6 +622,24 @@ try:
                 torch.save(model, f)
             best_n100 = n100
 
+        # kmeans centers
+        items_array = items.cpu().detach().numpy()
+        kmeans = KMeans(n_clusters=kfac).fit(items_array)
+        centers = torch.FloatTensor(kmeans.cluster_centers_).to(device)
+        predict = kmeans.predict(items_array)
+
+        # kmeans centers for title
+        if args.mvae:
+            titles_array = titles.cpu().detach().numpy()
+            kmeans_title = KMeans(n_clusters=kfac).fit(titles_array)
+            centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device)
+            predict_title = kmeans.predict(titles_array)
+    print(Counter(predict).keys())
+    print(Counter(predict).values())
+    if args.mvae:
+        print(Counter(predict_title).keys())
+        print(Counter(predict_title).values())
+
 except KeyboardInterrupt:
     print('-' * 89)
     print('Exiting from training early')
@@ -608,8 +650,13 @@ with open(args.save, 'rb') as f:
 
 # Run on test data.
 # test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
-test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy)
+if args.mvae:
+    test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy, centers, centers_title)
+else:
+    test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy, centers, None)
+
 print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
       'r50 {:4.5f}'.format(test_loss, n100, r20, r50))

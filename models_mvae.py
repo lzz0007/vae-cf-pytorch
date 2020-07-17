@@ -14,7 +14,7 @@ class MultiVAE(nn.Module):
     https://arxiv.org/abs/1802.05814
     """
 
-    def __init__(self, p_dims, q_dims=None, dropout=0.5, tau=0.1, std=0.075, kfac=7, nogb=False):
+    def __init__(self, p_dims, q_dims=None, dropout=0.5, tau=0.1, std=0.075, kfac=7, nogb=False, pre_word_embeds=None):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
         if q_dims:
@@ -46,12 +46,16 @@ class MultiVAE(nn.Module):
 
         self.drop = nn.Dropout(dropout)
         self.init_weights()
-        hidden_dim = 128
+
+        hidden_dim = 100
+
         # center for title
-        self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * hidden_dim))
-        nn.init.xavier_normal_(self.cores_title.data)
+        # self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * hidden_dim))
+        # nn.init.xavier_normal_(self.cores_title.data)
         # for title encoder
         self.fc1_enc = nn.Embedding(17424, hidden_dim)
+        if pre_word_embeds is not None:
+            self.fc1_enc.weight = nn.Parameter(torch.FloatTensor(pre_word_embeds))
         self.fc2_enc = nn.Linear(hidden_dim * 100 * 102, hidden_dim)
         self.fc31_enc = nn.Linear(hidden_dim, dfac)
         self.fc32_enc = nn.Linear(hidden_dim, dfac)
@@ -64,22 +68,24 @@ class MultiVAE(nn.Module):
 
         self.experts = ProductOfExperts()
 
-    def forward(self, input, data_title=None, init_kmeans=None):  # data_title: 100x102x100
+    def forward(self, input, data_title=None, centers=None, centers_title=None):  # data_title: 100x102x100
         batch_size = input.shape[0]
 
         # clustering
         # cores = F.normalize(self.cores)  # 7*100
-        cores = init_kmeans
+        cores = F.normalize(centers)
         items = F.normalize(self.items)  # 13015*100
 
         cates_logits = torch.mm(items, cores.t()) / self.tau  # 13015*7
         cates = self.cate_softmax(cates_logits)  # 13015x7
 
+        title_emb = None
         if data_title is not None:
             # print(torch.max(data_title))
             title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1)  # 100x102x51200
             title_emb = F.normalize(title_emb)
-            cores_title = F.normalize(self.cores_title)
+            # cores_title = F.normalize(self.cores_title)
+            cores_title = F.normalize(centers_title)
             cates_logits_title = title_emb.matmul(cores_title.t()) / self.tau  # 100x102x7
             cates_title = self.cate_softmax(cates_logits_title)  # 100x102x7
 
@@ -131,8 +137,7 @@ class MultiVAE(nn.Module):
 
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
-
-        return logits, std_list
+        return logits, std_list, items, title_emb
 
     def encode(self, input):
         h = F.normalize(input)
