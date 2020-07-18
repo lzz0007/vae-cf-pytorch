@@ -59,7 +59,7 @@ parser.add_argument('--dfac', type=int, default=100,
                     help='Dimension of each facet.')
 parser.add_argument('--nogb', action='store_true', default=False,
                     help='Disable Gumbel-Softmax sampling.')
-parser.add_argument('--mvae', action='store_true', default=True,
+parser.add_argument('--mvae', action='store_true', default=False,
                     help='whether to run mvae.')
 # args = parser.parse_args()
 args = parser.parse_known_args()
@@ -71,7 +71,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:2" if args.cuda else "cpu")
+device = torch.device("cuda:0" if args.cuda else "cpu")
 
 logging.basicConfig(filename='train_logs_paper',
                             filemode='a',
@@ -278,7 +278,7 @@ p_dims = [args.dfac, args.dfac, n_items]
 
 if args.mvae:
     model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                 nogb=args.nogb, pre_word_embeds=word_embeds).to(device)
+                                 nogb=args.nogb, pre_word_embeds=torch.FloatTensor(word_embeds).to(device)).to(device)
 else:
     model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
                                  nogb=args.nogb, pre_word_embeds=None).to(device)
@@ -371,14 +371,14 @@ def train(centers, centers_title):
         optimizer.zero_grad()
 
         if args.mvae:
-            recon_batch_1, std_list_1, items, titles = model(data, data_title_mask, centers, centers_title)
+            recon_batch_1, std_list_1, items = model(data, data_title_mask, centers, centers_title)
             loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-            recon_batch_2, std_list_2, _, _ = model(data, None, centers, centers_title=None)
+            recon_batch_2, std_list_2, _ = model(data, None, centers, centers_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_joint + loss_seq
             # loss = loss_joint
         else:
-            recon_batch_2, std_list_2, items, titles = model(data, None, centers, centers_title=None)
+            recon_batch_2, std_list_2, items = model(data, None, centers, centers_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_seq
 
@@ -411,7 +411,12 @@ def train(centers, centers_title):
 
             start_time = time.time()
             train_loss = 0.0
-    return items, titles
+
+    # title word embeddings
+    titles_words = model.fc1_enc.weight
+    # print(titles_words.shape)
+
+    return items, titles_words
 
 
 def evaluate(data_tr, data_te, data_buy, centers, centers_title):
@@ -472,7 +477,7 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 anneal = args.anneal_cap
 
             if args.mvae:
-                recon_batch_1, std_list_1, _, _ = model(data_tensor, data_title_mask, centers, centers_title)
+                recon_batch_1, std_list_1, _ = model(data_tensor, data_title_mask, centers, centers_title)
                 loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
                 recon_batch_2, std_list_2, _ = model(data_tensor, None, centers, None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -481,7 +486,7 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 # loss = loss_joint
                 # recon_batch = recon_batch_1
             else:
-                recon_batch_2, std_list_2, _, _ = model(data_tensor, None, centers, centers_title=None)
+                recon_batch_2, std_list_2, _ = model(data_tensor, None, centers, centers_title=None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_seq
                 recon_batch = recon_batch_2
@@ -580,7 +585,7 @@ try:
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
-        items, titles = train(centers, centers_title)
+        items, titles_words = train(centers, centers_title)
 
         # Performing decay on the learning rate
         if epoch % 20 == 0:
@@ -630,10 +635,16 @@ try:
 
         # kmeans centers for title
         if args.mvae:
-            titles_array = titles.cpu().detach().numpy()
-            kmeans_title = KMeans(n_clusters=kfac).fit(titles_array)
+            title_emb = np.zeros((len(item_title), max_word, 100))
+            titles_words = titles_words.cpu().detach().numpy()
+            for k, v in item_title.items():
+                for i, idx in enumerate(v):
+                    title_emb[k, i, :] = titles_words[idx, :]
+
+            title_emb_reshape = title_emb.reshape(len(item_title), max_word * 100)
+            kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb_reshape)
             centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device)
-            predict_title = kmeans.predict(titles_array)
+            predict_title = kmeans_title.predict(title_emb_reshape)
     print(Counter(predict).keys())
     print(Counter(predict).values())
     if args.mvae:

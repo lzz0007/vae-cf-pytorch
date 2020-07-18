@@ -55,7 +55,7 @@ class MultiVAE(nn.Module):
         # for title encoder
         self.fc1_enc = nn.Embedding(17424, hidden_dim)
         if pre_word_embeds is not None:
-            self.fc1_enc.weight = nn.Parameter(torch.FloatTensor(pre_word_embeds))
+            self.fc1_enc.weight = nn.Parameter(pre_word_embeds)
         self.fc2_enc = nn.Linear(hidden_dim * 100 * 102, hidden_dim)
         self.fc31_enc = nn.Linear(hidden_dim, dfac)
         self.fc32_enc = nn.Linear(hidden_dim, dfac)
@@ -137,7 +137,7 @@ class MultiVAE(nn.Module):
 
         logits = torch.log(probs)
         # logits = F.log_softmax(logits, dim=-1)
-        return logits, std_list, items, title_emb
+        return logits, std_list, items
 
     def encode(self, input):
         h = F.normalize(input)
