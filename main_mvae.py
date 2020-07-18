@@ -105,7 +105,7 @@ from collections import Counter
 # Standardize the data to have a mean of ~0 and a variance of 1
 X_std = StandardScaler().fit_transform(train_data.transpose().todense())
 # Create a PCA instance: pca
-pca = PCA(n_components=100)
+pca = PCA(n_components=100, random_state=args.seed)
 principalComponents = pca.fit_transform(X_std)
 # Save components to a DataFrame
 PCA_components = pd.DataFrame(principalComponents)
@@ -127,7 +127,7 @@ PCA_components = pd.DataFrame(principalComponents)
 
 from k_medoid import KMedoids
 print('start doing Kmedoids')
-kmedoids = KMedoids(n_clusters=6, random_state=0).fit(PCA_components)
+kmedoids = KMedoids(n_clusters=6, random_state=args.seed).fit(PCA_components)
 print(Counter(kmedoids.labels_).keys())
 print(Counter(kmedoids.labels_).values())
 kmedoids_center = kmedoids.cluster_centers_
