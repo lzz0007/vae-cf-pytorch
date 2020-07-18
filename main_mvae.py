@@ -68,7 +68,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:2" if args.cuda else "cpu")
+device = torch.device("cuda:0" if args.cuda else "cpu")
 
 logging.basicConfig(filename='train_logs_paper',
                             filemode='a',
@@ -251,9 +251,10 @@ def train():
         if args.mvae:
             recon_batch_1, std_list_1 = model(data, data_title_mask)
             loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-            recon_batch_2, std_list_2 = model(data, data_title=None)
-            loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-            loss = loss_joint + loss_seq
+            # recon_batch_2, std_list_2 = model(data, data_title=None)
+            # loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
+            # loss = loss_joint + loss_seq
+            loss = loss_joint
         else:
             recon_batch_2, std_list_2 = model(data, data_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -350,10 +351,12 @@ def evaluate(data_tr, data_te, data_buy):
             if args.mvae:
                 recon_batch_1, std_list_1 = model(data_tensor, data_title_mask)
                 loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-                recon_batch_2, std_list_2 = model(data_tensor, data_title=None)
-                loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-                loss = loss_joint + loss_seq
-                recon_batch = (recon_batch_2 + recon_batch_1) / 2
+                # recon_batch_2, std_list_2 = model(data_tensor, data_title=None)
+                # loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
+                # loss = loss_joint + loss_seq
+                # recon_batch = (recon_batch_2 + recon_batch_1) / 2
+                loss = loss_joint
+                recon_batch = recon_batch_1
             else:
                 recon_batch_2, std_list_2 = model(data_tensor, data_title=None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -457,8 +460,8 @@ try:
         train()
 
         # Performing decay on the learning rate
-        if epoch % 20 == 0:
-            adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * epoch / 20))
+        if epoch % 100 == 0:
+            adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * epoch / 100))
 
         # evaluate
         # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
@@ -470,13 +473,13 @@ try:
                 epoch, time.time() - epoch_start_time, val_loss,
                 n100, r20, r50))
         print('-' * 89)
-        logger.info('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
-              'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
-                    'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
-                    '| r40 {:5.5f}| r50 {:5.5f}| r60 {:5.5f}| r70 {:5.5f}| r80 {:5.5f}| r90 {:5.5f}| r100 {:5.5f}'.format(
-                epoch, time.time() - epoch_start_time, val_loss,
-                 n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
-                    r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
+        # logger.info('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
+        #       'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
+        #             'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
+        #             '| r40 {:5.5f}| r50 {:5.5f}| r60 {:5.5f}| r70 {:5.5f}| r80 {:5.5f}| r90 {:5.5f}| r100 {:5.5f}'.format(
+        #         epoch, time.time() - epoch_start_time, val_loss,
+        #          n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
+        #             r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
 
         n_iter = epoch * len(range(0, N, args.batch_size))
         writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)

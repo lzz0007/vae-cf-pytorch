@@ -47,7 +47,7 @@ class MultiVAE(nn.Module):
         self.drop = nn.Dropout(dropout)
         self.init_weights()
 
-        hidden_dim = 128
+        hidden_dim = 100
         # center for title
         self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * hidden_dim))
         nn.init.xavier_normal_(self.cores_title.data)
