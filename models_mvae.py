@@ -59,11 +59,11 @@ class MultiVAE(nn.Module):
         self.fc2_enc = nn.Linear(hidden_dim * 100 * 102, hidden_dim)
         self.fc31_enc = nn.Linear(hidden_dim, dfac)
         self.fc32_enc = nn.Linear(hidden_dim, dfac)
-        # # for title decoder
-        # self.fc1_dec = nn.Linear(100, 128)
-        # self.fc2_dec = nn.Linear(128, 128)
-        # self.fc3_dec = nn.Linear(128, 128)
-        # self.fc4_dec = nn.Linear(128, 102*100*17424)
+        # for title decoder
+        self.fc1_dec = nn.Linear(100, hidden_dim)
+        self.fc2_dec = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3_dec = nn.Linear(hidden_dim, hidden_dim)
+        self.fc4_dec = nn.Linear(hidden_dim, 102*17424)
         self.swish = Swish()
 
         self.experts = ProductOfExperts()
@@ -85,7 +85,7 @@ class MultiVAE(nn.Module):
             title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1)  # 100x102x51200
             title_emb = F.normalize(title_emb)
             # cores_title = F.normalize(self.cores_title)
-            cores_title = F.normalize(centers_title)
+            cores_title = F.normalize(centers_title) # 7x51200
             cates_logits_title = title_emb.matmul(cores_title.t()) / self.tau  # 100x102x7
             cates_title = self.cate_softmax(cates_logits_title)  # 100x102x7
 
@@ -127,17 +127,19 @@ class MultiVAE(nn.Module):
             probs = (probs_k if (probs is None) else (probs + probs_k))
 
             # title decoder
-            # title_k = self.title_decoder(z_k).view(batch_size, 102, 100, -1) # 100x102x17424
-            # title_k = title_k * cates_k_t.unsqueeze(3) # 100x102x
-            # probs_title = (title_k if (probs_title is None) else (probs_title + title_k)) # 100x102x
+            title_k = self.title_decoder(z_k).view(batch_size, 102, -1) # 100x102x17424
+            title_k = torch.exp(title_k)
+            title_k = title_k * cates_k_t # 100x102x17424
+            probs_title = (title_k if (probs_title is None) else (probs_title + title_k)) # 100x102x
 
             std_list.append(lnvarq_seq_k)
             if self.save_emb:
                 z_list.append(z_k)
 
-        logits = torch.log(probs)
+        logits = torch.log(probs) # 100x13015
+        logits_title = torch.log(probs_title) # 100x102x17424
         # logits = F.log_softmax(logits, dim=-1)
-        return logits, std_list, items
+        return logits, std_list, items, logits_title
 
     def encode(self, input):
         h = F.normalize(input)
@@ -319,7 +321,9 @@ def loss_function(x, std_list, recon_x, anneal, title, recon_title):
     # neg_elbo = recon_loss + anneal * kl
     recon_loss_title = 0
     if recon_title is not None:
-        recon_loss_title = torch.sum(cross_entropy(recon_title, title), dim=1)
+        # recon_loss_title = torch.sum(cross_entropy(recon_title, title), dim=1)
+        recon_loss_title = torch.mean(torch.sum(-F.log_softmax(recon_title.view(recon_title.shape[0], -1), 1) *
+                                                title.view(title.shape[0], -1), -1))
 
     return recon_loss + anneal * kl + recon_loss_title
 
