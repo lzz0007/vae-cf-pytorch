@@ -325,7 +325,7 @@ def loss_function(x, std_list, recon_x, anneal, title, recon_title):
         recon_loss_title = torch.mean(torch.sum(-F.log_softmax(recon_title.view(recon_title.shape[0], -1), 1) *
                                                 title.view(title.shape[0], -1), -1))
 
-    return recon_loss + anneal * kl + recon_loss_title
+    return recon_loss + anneal * kl + 0.1*recon_loss_title
 
 
 # def prior_expert(size, use_cuda=False):
