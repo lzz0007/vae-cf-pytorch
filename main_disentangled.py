@@ -12,6 +12,7 @@ import data
 import metric
 
 import torch.nn.functional as F
+import logging
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='data/amazon',
@@ -58,6 +59,12 @@ if torch.cuda.is_available():
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
 
+logging.basicConfig(filename='train_logs',
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
+logger = logging.getLogger()
 ###############################################################################
 # Load data
 ###############################################################################
@@ -66,8 +73,8 @@ loader = data.DataLoader(args.data)
 
 n_items = loader.load_n_items()
 train_data, _ = loader.load_data('train')
-vad_data_tr, vad_data_te = loader.load_data('validation')
-test_data_tr, test_data_te = loader.load_data('test')
+vad_data_tr, vad_data_te, _ = loader.load_data('validation')
+test_data_tr, test_data_te, _ = loader.load_data('test')
 
 N = train_data.shape[0]
 idxlist = list(range(N))
@@ -180,6 +187,9 @@ def evaluate(data_tr, data_te):
     r20_list = []
     r50_list = []
 
+    n10_list, n20_list, n30_list, n40_list, n50_list, n60_list, n70_list, n80_list, n90_list = ([] for i in range(9))
+    r10_list, r30_list, r40_list, r60_list, r70_list, r80_list, r90_list, r100_list = ([] for i in range(8))
+
     with torch.no_grad():
         for start_idx in range(0, e_N, args.batch_size):
             end_idx = min(start_idx + args.batch_size, N)
@@ -213,12 +223,72 @@ def evaluate(data_tr, data_te):
             r20_list.append(r20)
             r50_list.append(r50)
 
+            n10 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 10)
+            n20 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 20)
+            n30 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 30)
+            n40 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 40)
+            n50 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 50)
+            n60 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 60)
+            n70 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 70)
+            n80 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 80)
+            n90 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 90)
+
+            n10_list.append(n10)
+            n20_list.append(n20)
+            n30_list.append(n30)
+            n40_list.append(n40)
+            n50_list.append(n50)
+            n60_list.append(n60)
+            n70_list.append(n70)
+            n80_list.append(n80)
+            n90_list.append(n90)
+
+            r10 = metric.Recall_at_k_batch(recon_batch, heldout_data, 10)
+            r30 = metric.Recall_at_k_batch(recon_batch, heldout_data, 30)
+            r40 = metric.Recall_at_k_batch(recon_batch, heldout_data, 40)
+            r60 = metric.Recall_at_k_batch(recon_batch, heldout_data, 60)
+            r70 = metric.Recall_at_k_batch(recon_batch, heldout_data, 70)
+            r80 = metric.Recall_at_k_batch(recon_batch, heldout_data, 80)
+            r90 = metric.Recall_at_k_batch(recon_batch, heldout_data, 90)
+            r100 = metric.Recall_at_k_batch(recon_batch, heldout_data, 100)
+
+            r10_list.append(r10)
+            r30_list.append(r30)
+            r40_list.append(r40)
+            r60_list.append(r60)
+            r70_list.append(r70)
+            r80_list.append(r80)
+            r90_list.append(r90)
+            r100_list.append(r100)
+
     total_loss /= len(range(0, e_N, args.batch_size))
     n100_list = np.concatenate(n100_list)
     r20_list = np.concatenate(r20_list)
     r50_list = np.concatenate(r50_list)
 
-    return total_loss, np.mean(n100_list), np.mean(r20_list), np.mean(r50_list)
+    n10_list = np.concatenate(n10_list)
+    n20_list = np.concatenate(n20_list)
+    n30_list = np.concatenate(n30_list)
+    n40_list = np.concatenate(n40_list)
+    n50_list = np.concatenate(n50_list)
+    n60_list = np.concatenate(n60_list)
+    n70_list = np.concatenate(n70_list)
+    n80_list = np.concatenate(n80_list)
+    n90_list = np.concatenate(n90_list)
+
+    r10_list = np.concatenate(r10_list)
+    r30_list = np.concatenate(r30_list)
+    r40_list = np.concatenate(r40_list)
+    r60_list = np.concatenate(r60_list)
+    r70_list = np.concatenate(r70_list)
+    r80_list = np.concatenate(r80_list)
+    r90_list = np.concatenate(r90_list)
+    r100_list = np.concatenate(r100_list)
+
+    return total_loss, np.mean(n10_list), np.mean(n20_list), np.mean(n30_list), np.mean(n40_list), np.mean(n50_list), \
+           np.mean(n60_list), np.mean(n70_list), np.mean(n80_list), np.mean(n90_list), np.mean(n100_list), \
+           np.mean(r10_list), np.mean(r20_list), np.mean(r30_list), np.mean(r40_list), np.mean(r50_list), \
+           np.mean(r60_list), np.mean(r70_list), np.mean(r80_list), np.mean(r90_list), np.mean(r100_list),
 
 
 best_n100 = -np.inf
@@ -231,7 +301,10 @@ try:
         # train
         train()
         # evaluate
-        val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
+        # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
+        val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
+        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te)
+
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
@@ -260,8 +333,19 @@ with open(args.save, 'rb') as f:
     model = torch.load(f)
 
 # Run on test data.
-test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
+# test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
+test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, r10, r20, r30, r40, \
+r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te)
+
 print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
       'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
 print('=' * 89)
+logger.info('|script: {}|kfac: {}|epochs: {:3d}|lr: {:5.5f}'.format('main_disentangled.py', args.kfac, args.epochs, args.lr))
+logger.info('|{:4.2f}| '
+            '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}| '
+            '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'
+            '|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'.format(
+    test_loss,
+    n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
+    r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))

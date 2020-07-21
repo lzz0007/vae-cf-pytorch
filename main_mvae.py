@@ -620,13 +620,20 @@ try:
                 epoch, time.time() - epoch_start_time, val_loss,
                 n100, r20, r50))
         print('-' * 89)
-        logger.info('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
-              'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
-                    'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
-                    '| r40 {:5.5f}| r50 {:5.5f}| r60 {:5.5f}| r70 {:5.5f}| r80 {:5.5f}| r90 {:5.5f}| r100 {:5.5f}'.format(
-                epoch, time.time() - epoch_start_time, val_loss,
-                 n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
-                    r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
+        # logger.info('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
+        #       'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
+        #             'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
+        #             '| r40 {:5.5f}| r50 {:5.5f}| r60 {:5.5f}| r70 {:5.5f}| r80 {:5.5f}| r90 {:5.5f}| r100 {:5.5f}'.format(
+        #         epoch, time.time() - epoch_start_time, val_loss,
+        #          n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
+        #             r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
+        # logger.info('|{:3d}|{:4.2f}|{:4.2f}| '
+        #       '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}| '
+        #             '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'
+        #             '|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'.format(
+        #         epoch, time.time() - epoch_start_time, val_loss,
+        #          n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
+        #             r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
 
         n_iter = epoch * len(range(0, N, args.batch_size))
         writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)
