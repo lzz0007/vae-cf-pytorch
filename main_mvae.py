@@ -601,7 +601,7 @@ try:
         items, titles_words = train(centers, centers_title)
 
         # Performing decay on the learning rate
-        if epoch % 20 == 0:
+        if epoch % 100 == 0:
             adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * epoch / 20))
 
         # evaluate
