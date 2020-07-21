@@ -379,12 +379,12 @@ def train(centers, centers_title):
         if args.mvae:
             recon_batch_1, std_list_1, items, recon_title = model(data, data_title_mask, centers, centers_title)
             loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
-            recon_batch_2, std_list_2, _ = model(data, None, centers, centers_title=None)
+            recon_batch_2, std_list_2, _, _ = model(data, None, centers, centers_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_joint + loss_seq
             # loss = loss_joint
         else:
-            recon_batch_2, std_list_2, items = model(data, None, centers, centers_title=None)
+            recon_batch_2, std_list_2, items, _ = model(data, None, centers, centers_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_seq
 

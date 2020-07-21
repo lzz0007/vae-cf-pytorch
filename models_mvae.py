@@ -127,17 +127,21 @@ class MultiVAE(nn.Module):
             probs = (probs_k if (probs is None) else (probs + probs_k))
 
             # title decoder
-            title_k = self.title_decoder(z_k).view(batch_size, 102, -1) # 100x102x17424
-            title_k = torch.exp(title_k)
-            title_k = title_k * cates_k_t # 100x102x17424
-            probs_title = (title_k if (probs_title is None) else (probs_title + title_k)) # 100x102x
+            if data_title is not None:
+                title_k = self.title_decoder(z_k).view(batch_size, 102, -1) # 100x102x17424
+                title_k = torch.exp(title_k)
+                title_k = title_k * cates_k_t # 100x102x17424
+                probs_title = (title_k if (probs_title is None) else (probs_title + title_k)) # 100x102x
 
             std_list.append(lnvarq_seq_k)
             if self.save_emb:
                 z_list.append(z_k)
 
         logits = torch.log(probs) # 100x13015
-        logits_title = torch.log(probs_title) # 100x102x17424
+        if data_title is not None:
+            logits_title = torch.log(probs_title) # 100x102x17424
+        else:
+            logits_title = None
         # logits = F.log_softmax(logits, dim=-1)
         return logits, std_list, items, logits_title
 
