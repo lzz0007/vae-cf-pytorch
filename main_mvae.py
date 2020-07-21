@@ -471,6 +471,13 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                         tmp.append(item_title[j].tolist())
                 data_title_word.append(tmp)
             # max_item = max([len(i) for i in data_title])
+
+            true_title = np.zeros((len(data_title), max_item, len(vocab2index)))
+            for i, c in enumerate(data_title_word):
+                for j, w in enumerate(c):
+                    true_title[i, j, w] = 1
+            true_title = torch.LongTensor(true_title).to(device)
+
             data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
             for i, c in enumerate(data_title_word):
                 data_title_mask[i, :len(c), :] = c
@@ -483,16 +490,16 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 anneal = args.anneal_cap
 
             if args.mvae:
-                recon_batch_1, std_list_1, _ = model(data_tensor, data_title_mask, centers, centers_title)
-                loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=None, recon_title=None)
-                recon_batch_2, std_list_2, _ = model(data_tensor, None, centers, None)
+                recon_batch_1, std_list_1, items, recon_title = model(data_tensor, data_title_mask, centers, centers_title)
+                loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
+                recon_batch_2, std_list_2, _, _ = model(data_tensor, None, centers, centers_title=None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_joint + loss_seq
                 recon_batch = (recon_batch_2 + recon_batch_1) / 2
                 # loss = loss_joint
                 # recon_batch = recon_batch_1
             else:
-                recon_batch_2, std_list_2, _ = model(data_tensor, None, centers, centers_title=None)
+                recon_batch_2, std_list_2, _, _ = model(data_tensor, None, centers, centers_title=None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_seq
                 recon_batch = recon_batch_2
