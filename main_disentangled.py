@@ -66,8 +66,8 @@ loader = data.DataLoader(args.data)
 
 n_items = loader.load_n_items()
 train_data, _ = loader.load_data('train')
-vad_data_tr, vad_data_te = loader.load_data('validation')
-test_data_tr, test_data_te = loader.load_data('test')
+vad_data_tr, vad_data_te, _ = loader.load_data('validation')
+test_data_tr, test_data_te, _ = loader.load_data('test')
 
 N = train_data.shape[0]
 idxlist = list(range(N))
