@@ -53,7 +53,8 @@ class MultiVAE(nn.Module):
         # self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * hidden_dim))
         # nn.init.xavier_normal_(self.cores_title.data)
         # for title encoder
-        self.fc1_enc = nn.Embedding(17424, hidden_dim)
+        # self.fc1_enc = nn.Embedding(17424, hidden_dim)
+        self.fc1_enc = nn.Linear(102*17424, hidden_dim)
         if pre_word_embeds is not None:
             self.fc1_enc.weight = nn.Parameter(pre_word_embeds)
         self.fc2_enc = nn.Linear(hidden_dim * 100 * 102, hidden_dim)
@@ -82,10 +83,11 @@ class MultiVAE(nn.Module):
         title_emb = None
         if data_title is not None:
             # print(torch.max(data_title))
-            title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1)  # 100x102x51200
+            # title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1)  # 100x102x51200
+            title_emb = self.fc1_enc(data_title) # 100x102x17424
             title_emb = F.normalize(title_emb)
             # cores_title = F.normalize(self.cores_title)
-            cores_title = F.normalize(centers_title) # 7x51200
+            cores_title = F.normalize(centers_title) # 7x17424
             cates_logits_title = title_emb.matmul(cores_title.t()) / self.tau  # 100x102x7
             cates_title = self.cate_softmax(cates_logits_title)  # 100x102x7
 

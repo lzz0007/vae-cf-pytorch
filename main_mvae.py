@@ -64,7 +64,7 @@ parser.add_argument('--mvae', action='store_true', default=False,
 # args = parser.parse_args()
 args = parser.parse_known_args()
 args = args[0]
-args.mvae = True
+
 # Set the random seed manually for reproductibility.
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
@@ -230,32 +230,36 @@ max_word = 100
 
 # load pretrained word embeddings
 if args.mvae:
-    import codecs
-    all_word_embeds = {}
-    for i, line in enumerate(codecs.open('data/glove.6B.100d.txt', 'r', 'utf-8')):
-        s = line.strip().split()
-        if len(s) == args.dfac + 1:
-            all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
+    # import codecs
+    # all_word_embeds = {}
+    # for i, line in enumerate(codecs.open('data/glove.6B.100d.txt', 'r', 'utf-8')):
+    #     s = line.strip().split()
+    #     if len(s) == args.dfac + 1:
+    #         all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
+    #
+    # # Intializing Word Embedding Matrix
+    # word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(vocab2index), args.dfac))
+    # for w in vocab2index:
+    #     if w in all_word_embeds:
+    #         word_embeds[vocab2index[w]] = all_word_embeds[w]
+    #     elif w.lower() in all_word_embeds:
+    #         word_embeds[vocab2index[w]] = all_word_embeds[w.lower()]
+    #
+    # print('Loaded %i pretrained embeddings.' % len(word_embeds))
+    # del all_word_embeds
+    #
+    # title_emb = np.zeros((len(item_title), max_word, 100))
+    # for k, v in item_title.items():
+    #     for i, idx in enumerate(v):
+    #         title_emb[k, i, :] = word_embeds[idx, :]
 
-    # Intializing Word Embedding Matrix
-    word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(vocab2index), args.dfac))
-    for w in vocab2index:
-        if w in all_word_embeds:
-            word_embeds[vocab2index[w]] = all_word_embeds[w]
-        elif w.lower() in all_word_embeds:
-            word_embeds[vocab2index[w]] = all_word_embeds[w.lower()]
-
-    print('Loaded %i pretrained embeddings.' % len(word_embeds))
-    del all_word_embeds
-
-    title_emb = np.zeros((len(item_title), max_word, 100))
+    title_emb = np.zeros((len(item2index), len(vocab2index)))
     for k, v in item_title.items():
-        for i, idx in enumerate(v):
-            title_emb[k, i, :] = word_embeds[idx, :]
+        title_emb[k, v] = 1
 
-    title_emb_reshape = title_emb.reshape(len(item_title), max_word*100)
-    kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb_reshape)
-    centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device)
+    # title_emb_reshape = title_emb.reshape(len(item_title), max_word*100)
+    kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb)
+    centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device) # 6x17424
 else:
     centers_title = None
 # titles = torch.from_numpy(embeddings).float().contiguous().to(device)
@@ -278,7 +282,7 @@ p_dims = [args.dfac, args.dfac, n_items]
 
 if args.mvae:
     model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                 nogb=args.nogb, pre_word_embeds=torch.FloatTensor(word_embeds).to(device)).to(device)
+                                 nogb=args.nogb, pre_word_embeds=None.to(device)).to(device)
 else:
     model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
                                  nogb=args.nogb, pre_word_embeds=None).to(device)
@@ -355,16 +359,16 @@ def train(centers, centers_title):
         # for i, items in enumerate(data_title):
         #     for j, item in enumerate(items):
         #         data_title_mask[i, j, :] = title_emb_reshape[item]
-        true_title = np.zeros((len(data_title), max_item, len(vocab2index)))
+        true_title = np.zeros((len(data_title), max_item, len(vocab2index))) # 100x102x17424
         for i, c in enumerate(data_title_word):
             for j, w in enumerate(c):
                 true_title[i, j, w] = 1
         true_title = torch.LongTensor(true_title).to(device)
 
-        data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
-        for i, c in enumerate(data_title_word):
-            data_title_mask[i, :len(c), :] = c
-        data_title_mask = torch.LongTensor(data_title_mask).to(device)
+        # data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
+        # for i, c in enumerate(data_title_word):
+        #     data_title_mask[i, :len(c), :] = c
+        # data_title_mask = torch.LongTensor(data_title_mask).to(device)
 
         # anneal
         if total_anneal_steps > 0:
@@ -377,7 +381,7 @@ def train(centers, centers_title):
         optimizer.zero_grad()
 
         if args.mvae:
-            recon_batch_1, std_list_1, items, recon_title = model(data, data_title_mask, centers, centers_title)
+            recon_batch_1, std_list_1, items, recon_title = model(data, true_title, centers, centers_title)
             loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
             recon_batch_2, std_list_2, _, _ = model(data, None, centers, centers_title=None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -419,10 +423,10 @@ def train(centers, centers_title):
             train_loss = 0.0
 
     # title word embeddings
-    titles_words = model.fc1_enc.weight
+    # titles_words = model.fc1_enc.weight
     # print(titles_words.shape)
 
-    return items, titles_words
+    return items
 
 
 def evaluate(data_tr, data_te, data_buy, centers, centers_title):
@@ -598,7 +602,7 @@ try:
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
-        items, titles_words = train(centers, centers_title)
+        items = train(centers, centers_title)
 
         # Performing decay on the learning rate
         if epoch % 100 == 0:
@@ -620,20 +624,6 @@ try:
                 epoch, time.time() - epoch_start_time, val_loss,
                 n100, r20, r50))
         print('-' * 89)
-        # logger.info('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
-        #       'n10 {:5.5f} | n20 {:5.5f} | n30 {:5.5f}| n40 {:5.5f} | n50 {:5.5f}| n60 {:5.5f} | n70 {:5.5f}| '
-        #             'n80 {:5.5f} | n90 {:5.5f}| n100 {:5.5f} | r10 {:5.5f} | r20 {:5.5f} | r30 {:5.5f}'
-        #             '| r40 {:5.5f}| r50 {:5.5f}| r60 {:5.5f}| r70 {:5.5f}| r80 {:5.5f}| r90 {:5.5f}| r100 {:5.5f}'.format(
-        #         epoch, time.time() - epoch_start_time, val_loss,
-        #          n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
-        #             r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
-        # logger.info('|{:3d}|{:4.2f}|{:4.2f}| '
-        #       '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}| '
-        #             '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'
-        #             '|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'.format(
-        #         epoch, time.time() - epoch_start_time, val_loss,
-        #          n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
-        #             r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
 
         n_iter = epoch * len(range(0, N, args.batch_size))
         writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)
@@ -653,23 +643,23 @@ try:
         centers = torch.FloatTensor(kmeans.cluster_centers_).to(device)
         predict = kmeans.predict(items_array)
 
-        # kmeans centers for title
-        if args.mvae:
-            title_emb = np.zeros((len(item_title), max_word, 100))
-            titles_words = titles_words.cpu().detach().numpy()
-            for k, v in item_title.items():
-                for i, idx in enumerate(v):
-                    title_emb[k, i, :] = titles_words[idx, :]
-
-            title_emb_reshape = title_emb.reshape(len(item_title), max_word * 100)
-            kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb_reshape)
-            centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device)
-            predict_title = kmeans_title.predict(title_emb_reshape)
+        # # kmeans centers for title
+        # if args.mvae:
+        #     title_emb = np.zeros((len(item_title), max_word, 100))
+        #     titles_words = titles_words.cpu().detach().numpy()
+        #     for k, v in item_title.items():
+        #         for i, idx in enumerate(v):
+        #             title_emb[k, i, :] = titles_words[idx, :]
+        #
+        #     title_emb_reshape = title_emb.reshape(len(item_title), max_word * 100)
+        #     kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb_reshape)
+        #     centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device)
+        #     predict_title = kmeans_title.predict(title_emb_reshape)
     print(Counter(predict).keys())
     print(Counter(predict).values())
-    if args.mvae:
-        print(Counter(predict_title).keys())
-        print(Counter(predict_title).values())
+    # if args.mvae:
+    #     print(Counter(predict_title).keys())
+    #     print(Counter(predict_title).values())
 
 except KeyboardInterrupt:
     print('-' * 89)
