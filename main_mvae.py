@@ -16,12 +16,12 @@ import pandas as pd
 import os
 import pickle
 from sklearn.cluster import KMeans
-from tqdm import tqdm
 import logging
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-
+from collections import Counter
+from k_medoid import KMedoids
 # torch.backends.cudnn.enabled = False
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
@@ -64,16 +64,16 @@ parser.add_argument('--mvae', action='store_true', default=False,
 # args = parser.parse_args()
 args = parser.parse_known_args()
 args = args[0]
-
+args.mvae = True
 # Set the random seed manually for reproductibility.
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:0" if args.cuda else "cpu")
+device = torch.device("cuda:3" if args.cuda else "cpu")
 
-logging.basicConfig(filename='train_logs_paper',
+logging.basicConfig(filename='train_logs',
                             filemode='a',
                             format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                             datefmt='%H:%M:%S',
@@ -101,7 +101,6 @@ total_anneal_steps = 5 * num_batches
 ###############################################################################
 # kmeans for interaction data
 ###############################################################################
-from collections import Counter
 # Standardize the data to have a mean of ~0 and a variance of 1
 X_std = StandardScaler().fit_transform(train_data.transpose().todense())
 # Create a PCA instance: pca
@@ -110,23 +109,7 @@ principalComponents = pca.fit_transform(X_std)
 # Save components to a DataFrame
 PCA_components = pd.DataFrame(principalComponents)
 
-# kmeans = KMeans(n_clusters=10).fit(PCA_components.iloc[:,:100])
-# y_kmeans = kmeans.predict(PCA_components.iloc[:,:100])
-# centers = kmeans.cluster_centers_
-# Counter(y_kmeans).keys() # equals to list(set(words))
-# Counter(y_kmeans).values() # counts the elements' frequency
-# np.where(y_kmeans==9)
-# tmp = train_data.transpose()[4880,:].todense()
-# len(np.where(tmp!=0)[1])
-# tmp[:,889]
-# plt.scatter(PCA_components.iloc[:, 0], PCA_components.iloc[:, 1], c=y_kmeans, s=50, cmap='viridis')
-# # plt.scatter(centers[:, 0], centers[:, 1], c='black', s=200, alpha=0.5)
-# plt.xlim(-10, 20)
-# plt.ylim(-50, 100)
-# plt.show()
-
-from k_medoid import KMedoids
-print('start doing Kmedoids')
+print('start doing Kmedoids for interaction')
 kmedoids = KMedoids(n_clusters=6, random_state=args.seed).fit(PCA_components)
 print(Counter(kmedoids.labels_).keys())
 print(Counter(kmedoids.labels_).values())
@@ -137,83 +120,9 @@ centers = torch.FloatTensor(kmedoids_center).to(device)
 kfac = len(labels)
 print('no of clusters:', kfac)
 
-# from sklearn.cluster import DBSCAN
-# clustering = DBSCAN().fit(PCA_components.iloc[:, :10])
-# Counter(clustering.labels_).keys()
-# Counter(clustering.labels_).values()
-# labels = clustering.labels_
-# n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
-# n_noise_ = list(labels).count(-1)
-# unique_labels = set(labels)
-# colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
-# core_samples_mask = np.zeros_like(clustering.labels_, dtype=bool)
-# core_samples_mask[clustering.core_sample_indices_] = True
-#
-# for k, col in zip(unique_labels, colors):
-#     if k == -1:
-#         # Black used for noise.
-#         col = [0, 0, 0, 1]
-#     class_member_mask = (labels == k)
-#     xy = PCA_components.iloc[:,:10][class_member_mask & core_samples_mask]
-#     plt.plot(xy.iloc[:, 0], xy.iloc[:, 1], 'o', markerfacecolor=tuple(col),
-#              markeredgecolor='k', markersize=6)
-#     xy = PCA_components.iloc[:,:10][class_member_mask & ~core_samples_mask]
-#     plt.plot(xy.iloc[:, 0], xy.iloc[:, 1], 'o', markerfacecolor=tuple(col),
-#              markeredgecolor='k', markersize=6)
-#
-# plt.title('Estimated number of clusters: %d' % n_clusters_)
-# plt.show()
-
-# from sklearn.manifold import TSNE
-# import matplotlib.pyplot as plt
-#
-# def plot(X, fig, col, size, true_labels):
-#     ax = fig.add_subplot(1, 1, 1)
-#     for i, point in enumerate(X):
-#         ax.scatter(point[0], point[1], s=size, c=col[true_labels[i]])
-#     ax.set_xlim([-100, 100])
-#     ax.set_ylim([-100, 100])
-# def plotClusters(features, labels):
-#     print('Start plotting using TSNE...')
-#     # Doing dimensionality reduction for plotting
-#     tsne = TSNE(n_components=2, random_state=1,init='pca')
-#     X_tsne = tsne.fit_transform(features)
-#     unique_labels = set(labels)
-#     print(unique_labels)
-#     # Plot figure
-#     fig = plt.figure()
-#     plot(X_tsne, fig, [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))], 2, labels)
-#     return fig
-#
-# fig = plotClusters(PCA_components.iloc[:,:100], kmedoids.labels_)
-# fig.show()
-
-# kmeans for interaction data
-# kmeans = KMeans(n_clusters=args.kfac, random_state=args.seed).fit(train_data.transpose())
-# init_kmeans = torch.FloatTensor(kmeans.cluster_centers_).to(device)
-# init_kmeans = F.normalize(init_kmeans)
-
 ###############################################################################
 # load item title
 ###############################################################################
-# with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
-#     dataset = pickle.load(f)
-#
-# item_title = dataset['data']
-# vocab2index = dataset['vocab2index']
-# cat2index = dataset['cat2index']
-# with open(os.path.join(args.data, 'pro_sg/unique_sid.txt'), "r") as f:
-#     unique_sid = []
-#     for l in f:
-#         unique_sid.append(l.rstrip("\n"))
-#
-# # filter items
-# item_title = item_title[item_title['asin'].isin(unique_sid)]
-# titles = []
-# for i in range(len(item_title)):
-#     titles.append(item_title['encoded'].iloc[i][0])
-# titles = np.array(titles)
-
 with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
     dataset = pickle.load(f)
 
@@ -256,10 +165,21 @@ if args.mvae:
     title_emb = np.zeros((len(item2index), len(vocab2index)))
     for k, v in item_title.items():
         title_emb[k, v] = 1
+    X_std = StandardScaler().fit_transform(title_emb)
+    # Create a PCA instance: pca
+    pca = PCA(n_components=100, random_state=args.seed)
+    principalComponents = pca.fit_transform(X_std)
+    # Save components to a DataFrame
+    PCA_components = pd.DataFrame(principalComponents)
 
-    # title_emb_reshape = title_emb.reshape(len(item_title), max_word*100)
-    kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb)
-    centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device) # 6x17424
+    print('start doing Kmedoids for title')
+    kmedoids = KMedoids(n_clusters=kfac, random_state=args.seed).fit(PCA_components)
+    print(Counter(kmedoids.labels_).keys())
+    print(Counter(kmedoids.labels_).values())
+    kmedoids_center = kmedoids.cluster_centers_
+    labels = np.array(list(set(kmedoids.labels_)))
+    kmedoids_center = kmedoids_center[labels]
+    centers_title = torch.FloatTensor(kmedoids_center).to(device) # 6x100
 else:
     centers_title = None
 # titles = torch.from_numpy(embeddings).float().contiguous().to(device)
@@ -274,21 +194,6 @@ hidden_dim = 100
 # img_features_filtered = torch.load('images_filtered.pt')
 # img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguous().to(device)
 
-###############################################################################
-# Build the model
-###############################################################################
-
-p_dims = [args.dfac, args.dfac, n_items]
-
-if args.mvae:
-    model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                 nogb=args.nogb, pre_word_embeds=None.to(device)).to(device)
-else:
-    model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                 nogb=args.nogb, pre_word_embeds=None).to(device)
-
-optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
-criterion = models_mvae.loss_function
 
 ###############################################################################
 # Training code
@@ -354,21 +259,11 @@ def train(centers, centers_title):
             data_title_word.append(tmp)
         # data_title = [train_buy[i] for i in range(start_idx, end_idx)]
 
-        # title_emb_reshape.shape
-        # data_title_mask = np.zeros((len(data_title), max_item, title_emb_reshape.shape[1]), dtype=int)
-        # for i, items in enumerate(data_title):
-        #     for j, item in enumerate(items):
-        #         data_title_mask[i, j, :] = title_emb_reshape[item]
         true_title = np.zeros((len(data_title), max_item, len(vocab2index))) # 100x102x17424
         for i, c in enumerate(data_title_word):
             for j, w in enumerate(c):
                 true_title[i, j, w] = 1
-        true_title = torch.LongTensor(true_title).to(device)
-
-        # data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
-        # for i, c in enumerate(data_title_word):
-        #     data_title_mask[i, :len(c), :] = c
-        # data_title_mask = torch.LongTensor(data_title_mask).to(device)
+        true_title = torch.FloatTensor(true_title).to(device)
 
         # anneal
         if total_anneal_steps > 0:
@@ -381,14 +276,14 @@ def train(centers, centers_title):
         optimizer.zero_grad()
 
         if args.mvae:
-            recon_batch_1, std_list_1, items, recon_title = model(data, true_title, centers, centers_title)
+            recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data, true_title)
             loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
-            recon_batch_2, std_list_2, _, _ = model(data, None, centers, centers_title=None)
+            recon_batch_2, std_list_2, _, _, _ = model(data, None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-            loss = loss_joint + loss_seq
+            loss = loss_joint + loss_seq + cluster_loss
             # loss = loss_joint
         else:
-            recon_batch_2, std_list_2, items, _ = model(data, None, centers, centers_title=None)
+            recon_batch_2, std_list_2, items, _ = model(data, None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_seq
 
@@ -480,12 +375,7 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
             for i, c in enumerate(data_title_word):
                 for j, w in enumerate(c):
                     true_title[i, j, w] = 1
-            true_title = torch.LongTensor(true_title).to(device)
-
-            data_title_mask = np.zeros((len(data_title), max_item, max_word), dtype=int)
-            for i, c in enumerate(data_title_word):
-                data_title_mask[i, :len(c), :] = c
-            data_title_mask = torch.LongTensor(data_title_mask).to(device)
+            true_title = torch.FloatTensor(true_title).to(device)
 
             if total_anneal_steps > 0:
                 anneal = min(args.anneal_cap,
@@ -494,16 +384,16 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 anneal = args.anneal_cap
 
             if args.mvae:
-                recon_batch_1, std_list_1, items, recon_title = model(data_tensor, data_title_mask, centers, centers_title)
+                recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data_tensor, true_title)
                 loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
-                recon_batch_2, std_list_2, _, _ = model(data_tensor, None, centers, centers_title=None)
+                recon_batch_2, std_list_2, _, _, _ = model(data_tensor, None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-                loss = loss_joint + loss_seq
+                loss = loss_joint + loss_seq + cluster_loss
                 recon_batch = (recon_batch_2 + recon_batch_1) / 2
                 # loss = loss_joint
                 # recon_batch = recon_batch_1
             else:
-                recon_batch_2, std_list_2, _, _ = model(data_tensor, None, centers, centers_title=None)
+                recon_batch_2, std_list_2, _, _ = model(data_tensor, None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_seq
                 recon_batch = recon_batch_2
@@ -596,8 +486,22 @@ update_count = 0
 
 # At any point you can hit Ctrl + C to break out of training early.
 try:
-    # train for items
+    ###############################################################################
+    # Build the model
+    ###############################################################################
+    p_dims = [args.dfac, args.dfac, n_items]
 
+    if args.mvae:
+        model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
+                                     nogb=args.nogb, pre_word_embeds=None, centers=centers,
+                                     centers_title=centers_title).to(device)
+    else:
+        model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
+                                     nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None).to(
+            device)
+
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+    criterion = models_mvae.loss_function
     # disentangled
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
@@ -638,10 +542,10 @@ try:
             best_n100 = n100
 
         # kmeans centers
-        items_array = items.cpu().detach().numpy()
-        kmeans = KMeans(n_clusters=kfac).fit(items_array)
-        centers = torch.FloatTensor(kmeans.cluster_centers_).to(device)
-        predict = kmeans.predict(items_array)
+        # items_array = items.cpu().detach().numpy()
+        # kmeans = KMeans(n_clusters=kfac).fit(items_array)
+        # centers = torch.FloatTensor(kmeans.cluster_centers_).to(device)
+        # predict = kmeans.predict(items_array)
 
         # # kmeans centers for title
         # if args.mvae:
@@ -655,8 +559,8 @@ try:
         #     kmeans_title = KMeans(n_clusters=kfac, random_state=args.seed).fit(title_emb_reshape)
         #     centers_title = torch.FloatTensor(kmeans_title.cluster_centers_).to(device)
         #     predict_title = kmeans_title.predict(title_emb_reshape)
-    print(Counter(predict).keys())
-    print(Counter(predict).values())
+    # print(Counter(predict).keys())
+    # print(Counter(predict).values())
     # if args.mvae:
     #     print(Counter(predict_title).keys())
     #     print(Counter(predict_title).values())

@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 from torch.autograd import Variable
-
+import random
 
 class MultiVAE(nn.Module):
     """
@@ -14,7 +14,8 @@ class MultiVAE(nn.Module):
     https://arxiv.org/abs/1802.05814
     """
 
-    def __init__(self, p_dims, q_dims=None, dropout=0.5, tau=0.1, std=0.075, kfac=7, nogb=False, pre_word_embeds=None):
+    def __init__(self, p_dims, q_dims=None, dropout=0.5, tau=0.1, std=0.075, kfac=7, nogb=False, pre_word_embeds=None,
+                 centers=None, centers_title=None):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
         if q_dims:
@@ -35,7 +36,8 @@ class MultiVAE(nn.Module):
         dfac = self.q_dims[-1]
         self.kfac = kfac
         num_items = self.q_dims[0]
-        # self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
+        self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
+        self.cores.data = centers
         self.items = nn.Parameter(torch.empty(num_items, dfac))
         # nn.init.xavier_normal_(self.cores.data)
         nn.init.xavier_normal_(self.items.data)
@@ -50,16 +52,17 @@ class MultiVAE(nn.Module):
         hidden_dim = 100
 
         # center for title
-        # self.cores_title = nn.Parameter(torch.empty(self.kfac, 100 * hidden_dim))
+        self.cores_title = nn.Parameter(torch.empty(self.kfac, hidden_dim))
+        self.cores_title.data = centers_title
         # nn.init.xavier_normal_(self.cores_title.data)
         # for title encoder
         # self.fc1_enc = nn.Embedding(17424, hidden_dim)
-        self.fc1_enc = nn.Linear(102*17424, hidden_dim)
+        self.fc1_enc = nn.Linear(17424, hidden_dim)
         if pre_word_embeds is not None:
             self.fc1_enc.weight = nn.Parameter(pre_word_embeds)
-        self.fc2_enc = nn.Linear(hidden_dim * 100 * 102, hidden_dim)
-        self.fc31_enc = nn.Linear(hidden_dim, dfac)
-        self.fc32_enc = nn.Linear(hidden_dim, dfac)
+        self.fc2_enc = nn.Linear(hidden_dim, hidden_dim)
+        self.fc31_enc = nn.Linear(hidden_dim*102, dfac)
+        self.fc32_enc = nn.Linear(hidden_dim*102, dfac)
         # for title decoder
         self.fc1_dec = nn.Linear(100, hidden_dim)
         self.fc2_dec = nn.Linear(hidden_dim, hidden_dim)
@@ -69,12 +72,12 @@ class MultiVAE(nn.Module):
 
         self.experts = ProductOfExperts()
 
-    def forward(self, input, data_title=None, centers=None, centers_title=None):  # data_title: 100x102x100
+    def forward(self, input, data_title=None):  # data_title: 100x102x100
         batch_size = input.shape[0]
 
         # clustering
         # cores = F.normalize(self.cores)  # 7*100
-        cores = F.normalize(centers)
+        cores = F.normalize(self.cores)
         items = F.normalize(self.items)  # 13015*100
 
         cates_logits = torch.mm(items, cores.t()) / self.tau  # 13015*7
@@ -84,10 +87,10 @@ class MultiVAE(nn.Module):
         if data_title is not None:
             # print(torch.max(data_title))
             # title_emb = self.fc1_enc(data_title).view(batch_size, data_title.shape[1], -1)  # 100x102x51200
-            title_emb = self.fc1_enc(data_title) # 100x102x17424
+            title_emb = self.fc1_enc(data_title) # 100x102x100
             title_emb = F.normalize(title_emb)
             # cores_title = F.normalize(self.cores_title)
-            cores_title = F.normalize(centers_title) # 7x17424
+            cores_title = F.normalize(self.cores_title) # 7x100
             cates_logits_title = title_emb.matmul(cores_title.t()) / self.tau  # 100x102x7
             cates_title = self.cate_softmax(cates_logits_title)  # 100x102x7
 
@@ -109,11 +112,10 @@ class MultiVAE(nn.Module):
 
             if data_title is not None:
                 cates_k_t = cates_title[:, :, k].unsqueeze(2)  # 100x102x1
-                title_k = title_emb * cates_k_t  # 100x102x51200
+                title_k = title_emb * cates_k_t  # 100x102x100
                 mu_title, std_title = self.title_encoder(title_k)  # 100x100
                 mu_k = torch.cat((mu_seq_k.unsqueeze(0), mu_title.unsqueeze(0)), dim=0)  # 3x100x100
                 std_k = torch.cat((std_seq_k.unsqueeze(0), std_title.unsqueeze(0)), dim=0)
-
                 # product of gaussians
                 mu_k, std_k = self.experts(mu_k, std_k)  # 100x100
             else:
@@ -133,7 +135,7 @@ class MultiVAE(nn.Module):
                 title_k = self.title_decoder(z_k).view(batch_size, 102, -1) # 100x102x17424
                 title_k = torch.exp(title_k)
                 title_k = title_k * cates_k_t # 100x102x17424
-                probs_title = (title_k if (probs_title is None) else (probs_title + title_k)) # 100x102x
+                probs_title = (title_k if (probs_title is None) else (probs_title + title_k)) # 100x102x17424
 
             std_list.append(lnvarq_seq_k)
             if self.save_emb:
@@ -145,7 +147,12 @@ class MultiVAE(nn.Module):
         else:
             logits_title = None
         # logits = F.log_softmax(logits, dim=-1)
-        return logits, std_list, items, logits_title
+
+        cluster_loss = None
+        if data_title is not None:
+            cluster_loss = self.cluster_similarity()
+
+        return logits, std_list, items, logits_title, cluster_loss
 
     def encode(self, input):
         h = F.normalize(input)
@@ -165,12 +172,12 @@ class MultiVAE(nn.Module):
         return mu, std_q, lnvarq_sub_lnvar0
 
     def title_encoder(self, x):
-        h = self.swish(x.view(x.shape[0], -1))
-        h = self.swish(self.fc2_enc(h))
+        h = self.swish(x)
+        h = self.swish(self.fc2_enc(h)).view(x.shape[0], -1) # 100x10200
         return self.fc31_enc(h), self.fc32_enc(h)
 
     def title_decoder(self, x):
-        h = self.swish(self.fc1_dec(x))
+        h = self.swish(self.fc1_dec(x)) # 100x100
         h = self.swish(self.fc2_dec(h))
         h = self.swish(self.fc3_dec(h))
         return self.fc4_dec(h)
@@ -216,16 +223,20 @@ class MultiVAE(nn.Module):
             # Normal Initialization for Biases
             layer.bias.data.normal_(0.0, 0.001)
 
-        # for layer in self.p_layers:
-        #     # Xavier Initialization for weights
-        #     size = layer.weight.size()
-        #     fan_out = size[0]
-        #     fan_in = size[1]
-        #     std = np.sqrt(2.0 / (fan_in + fan_out))
-        #     layer.weight.data.normal_(0.0, std)
-        #
-        #     # Normal Initialization for Biases
-        #     layer.bias.data.normal_(0.0, 0.001)
+    def cluster_similarity(self):
+        k = self.cores.shape[0]
+        cores = F.normalize(self.cores)
+        cores_title = F.normalize(self.cores_title)
+        tot_loss = 0
+        for i in range(k):
+            pos_similarity = torch.mm(cores[i, :].unsqueeze(0), cores_title[i, :].unsqueeze(1))
+            neg = np.random.randint(k)
+            while neg == i:
+                neg = np.random.randint(k)
+            neg_similarity = torch.mm(cores[neg, :].unsqueeze(0), cores_title[i, :].unsqueeze(1))
+            loss = max(0, neg_similarity - pos_similarity)
+            tot_loss += loss
+        return tot_loss
 
 
 class Swish(nn.Module):
