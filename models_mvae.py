@@ -18,7 +18,7 @@ class MultiVAE(nn.Module):
                  centers=None, centers_title=None):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
-        if q_dims:
+        if q_dims: # 13015x100x100
             assert q_dims[0] == p_dims[-1], "In and Out dimensions must equal to each other"
             assert q_dims[-1] == p_dims[0], "Latent dimension for p- and q- network mismatches."
             self.q_dims = q_dims
@@ -32,6 +32,9 @@ class MultiVAE(nn.Module):
                                        d_in, d_out in zip(temp_q_dims[:-1], temp_q_dims[1:])])
         # self.p_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
         #                                d_in, d_out in zip(self.p_dims[:-1], self.p_dims[1:])])
+        temp_c_dims = [self.q_dims[0]+10200] + [self.q_dims[1]] + [self.q_dims[-1] * 2]
+        self.c_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
+                                       d_in, d_out in zip(temp_c_dims[:-1], temp_c_dims[1:])])
 
         dfac = self.q_dims[-1]
         self.kfac = kfac
@@ -113,11 +116,13 @@ class MultiVAE(nn.Module):
             if data_title is not None:
                 cates_k_t = cates_title[:, :, k].unsqueeze(2)  # 100x102x1
                 title_k = title_emb * cates_k_t  # 100x102x100
-                mu_title, std_title = self.title_encoder(title_k)  # 100x100
-                mu_k = torch.cat((mu_seq_k.unsqueeze(0), mu_title.unsqueeze(0)), dim=0)  # 3x100x100
-                std_k = torch.cat((std_seq_k.unsqueeze(0), std_title.unsqueeze(0)), dim=0)
+                combined_k = torch.cat((x_k, title_k.view(batch_size, -1)), dim=1)
+                mu_k, std_k, lnvarq_k = self.encode_combined(combined_k)
+                # mu_title, std_title = self.title_encoder(title_k)  # 100x100
+                # mu_k = torch.cat((mu_seq_k.unsqueeze(0), mu_title.unsqueeze(0)), dim=0)  # 3x100x100
+                # std_k = torch.cat((std_seq_k.unsqueeze(0), std_title.unsqueeze(0)), dim=0)
                 # product of gaussians
-                mu_k, std_k = self.experts(mu_k, std_k)  # 100x100
+                # mu_k, std_k = self.experts(mu_k, std_k)  # 100x100
             else:
                 mu_k, std_k = mu_seq_k, std_seq_k
             # zk embedding
@@ -161,6 +166,23 @@ class MultiVAE(nn.Module):
         for i, layer in enumerate(self.q_layers):
             h = layer(h)
             if i != len(self.q_layers) - 1:
+                h = torch.tanh(h)
+            else:  # for last layer
+                mu = h[:, :self.q_dims[-1]]
+                mu = F.normalize(mu)
+                # logvar = h[:, self.q_dims[-1]:]
+                lnvarq_sub_lnvar0 = -h[:, self.q_dims[-1]:]
+                std0 = self.std
+                std_q = torch.exp(0.5 * lnvarq_sub_lnvar0) * std0
+        return mu, std_q, lnvarq_sub_lnvar0
+
+    def encode_combined(self, input):
+        h = F.normalize(input)
+        h = self.drop(h)
+
+        for i, layer in enumerate(self.c_layers):
+            h = layer(h)
+            if i != len(self.c_layers) - 1:
                 h = torch.tanh(h)
             else:  # for last layer
                 mu = h[:, :self.q_dims[-1]]
@@ -219,7 +241,15 @@ class MultiVAE(nn.Module):
             fan_in = size[1]
             std = np.sqrt(2.0 / (fan_in + fan_out))
             layer.weight.data.normal_(0.0, std)
-
+            # Normal Initialization for Biases
+            layer.bias.data.normal_(0.0, 0.001)
+        for layer in self.c_layers:
+            # Xavier Initialization for weights
+            size = layer.weight.size()
+            fan_out = size[0]
+            fan_in = size[1]
+            std = np.sqrt(2.0 / (fan_in + fan_out))
+            layer.weight.data.normal_(0.0, std)
             # Normal Initialization for Biases
             layer.bias.data.normal_(0.0, 0.001)
 
