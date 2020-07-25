@@ -22,16 +22,17 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from collections import Counter
 from k_medoid import KMedoids
+from torch.autograd import Variable
 # torch.backends.cudnn.enabled = False
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 parser.add_argument('--data', type=str, default='data/amazon',
                     help='Movielens-20m dataset location')
-parser.add_argument('--lr', type=float, default=1e-3,
+parser.add_argument('--lr', type=float, default=1e-4,
                     help='initial learning rate')
 parser.add_argument('--wd', type=float, default=0.001,
                     help='weight decay coefficient')
-parser.add_argument('--batch_size', type=int, default=100,
+parser.add_argument('--batch_size', type=int, default=1,
                     help='batch size')
 parser.add_argument('--epochs', type=int, default=100,
                     help='upper epoch limit')
@@ -71,7 +72,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:3" if args.cuda else "cpu")
+device = torch.device("cuda:1" if args.cuda else "cpu")
 
 logging.basicConfig(filename='train_logs',
                             filemode='a',
@@ -134,7 +135,8 @@ category_id = np.array(dataset['category_id'])
 item_title = dataset['meta_titles']
 
 max_item = max([len(v) for k, v in train_buy.items()])
-max_word = 100
+max_word = max([len(i['words']) for i in item_title])
+
 # embeddings = torch.load('embeddings.pt')
 
 # load pretrained word embeddings
@@ -162,9 +164,7 @@ if args.mvae:
     #     for i, idx in enumerate(v):
     #         title_emb[k, i, :] = word_embeds[idx, :]
 
-    title_emb = np.zeros((len(item2index), len(vocab2index)))
-    for k, v in item_title.items():
-        title_emb[k, v] = 1
+    title_emb = item_mat.todense()
     X_std = StandardScaler().fit_transform(title_emb)
     # Create a PCA instance: pca
     pca = PCA(n_components=100, random_state=args.seed)
@@ -182,6 +182,7 @@ if args.mvae:
     centers_title = torch.FloatTensor(kmedoids_center).to(device) # 6x100
 else:
     centers_title = None
+
 # titles = torch.from_numpy(embeddings).float().contiguous().to(device)
 
 # define parameters for titles
@@ -222,7 +223,7 @@ def adjust_learning_rate(optimizer, lr):
         param_group['lr'] = lr
 
 
-def train(centers, centers_title):
+def train():
     set_rng_seed(args.seed)
 
     # Turn on training mode
@@ -238,32 +239,49 @@ def train(centers, centers_title):
 
         # seq
         data = train_data[idxlist[start_idx:end_idx]]
-        data = naive_sparse2tensor(data).to(device)
+        data_tensor = naive_sparse2tensor(data).to(device) # batchx13015
 
         # title
-        data_title = []
-        for i in range(start_idx, end_idx):
-            if i in train_buy: # what items did the user purchase
-                data_title.append(train_buy[i])
-            else:
-                data_title.append([])
-        # data_title = [data_buy[i] for i in range(start_idx, end_idx)]
-        data_title_word = [] # word index that each item has
-        for i in data_title:
-            tmp = []
-            if not i:
-                tmp.append([0] * 100)
-            else:
-                for j in i:
-                    tmp.append(item_title[j].tolist())
-            data_title_word.append(tmp)
-        # data_title = [train_buy[i] for i in range(start_idx, end_idx)]
+        # purchased_items = []
+        # for i in range(data.shape[0]):
+        #     purchased_items.append(list(data[i].nonzero()[1]))
+        # purchased_items_title = [] # word index that each item has
+        # for items in purchased_items:
+        #     w = []
+        #     for item in items:
+        #         w.append(item_title[item]['words'])
+        #     purchased_items_title.append(w)
+        purchased_items = list(data.nonzero()[1])
+        purchased_items_mask = np.zeros(max_item)
+        purchased_items_mask[:len(purchased_items)] = purchased_items
 
-        true_title = np.zeros((len(data_title), max_item, len(vocab2index))) # 100x102x17424
-        for i, c in enumerate(data_title_word):
-            for j, w in enumerate(c):
-                true_title[i, j, w] = 1
-        true_title = torch.FloatTensor(true_title).to(device)
+        purchased_items_title = []
+        for idx, item in enumerate(list(purchased_items_mask)):
+            if np.sum(item) == 0 and idx >= len(purchased_items):
+                purchased_items_title.append([0])
+            else:
+                purchased_items_title.append(item_title[int(item)]['words'])
+
+        purchased_items_title_sorted = sorted(purchased_items_title, key=lambda p: len(p), reverse=True)
+        purchased_items_mask = Variable(torch.LongTensor(purchased_items_mask).to(device))
+
+        d = {}
+        for i, ci in enumerate(purchased_items_title):
+            for j, cj in enumerate(purchased_items_title_sorted):
+                if ci == cj and not j in d and not i in d.values():
+                    d[j] = i
+                    continue
+        title_length = [len(c) for c in purchased_items_title_sorted]
+        title_maxl = max(title_length)
+        title_mask = np.zeros((len(purchased_items_title_sorted), title_maxl), dtype='int')
+        for i, c in enumerate(purchased_items_title_sorted):
+            title_mask[i, :title_length[i]] = c
+        title_mask = Variable(torch.LongTensor(title_mask).to(device))
+
+        purchased_items_title_onehot = np.zeros((len(purchased_items_title), len(vocab2index)))
+        for i, c in enumerate(purchased_items_title):
+            purchased_items_title_onehot[i, c] = 1
+        purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
 
         # anneal
         if total_anneal_steps > 0:
@@ -276,12 +294,14 @@ def train(centers, centers_title):
         optimizer.zero_grad()
 
         if args.mvae:
-            recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data, true_title)
-            loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
-            recon_batch_2, std_list_2, _, _, _ = model(data, None)
-            loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-            loss = loss_joint + loss_seq + cluster_loss
-            # loss = loss_joint
+            recon_batch_1, std_list_1, items, recon_title, cluster_loss, std_list_title = \
+                model(data_tensor, purchased_items_mask.to(device), title_mask.to(device), title_length, d)
+            loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
+                                   purchased_items_title_onehot, recon_title, std_list_title)
+            # recon_batch_2, std_list_2, _, _, _ = model(data, None)
+            # loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
+            # loss = loss_joint + loss_seq + cluster_loss
+            loss = loss_joint + cluster_loss
         else:
             recon_batch_2, std_list_2, items, _ = model(data, None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -353,29 +373,37 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
             data_tensor = naive_sparse2tensor(data).to(device)
 
             # title
-            data_title = []
-            for i in range(start_idx, end_idx):
-                if i in data_buy:
-                    data_title.append(data_buy[i])
-                else:
-                    data_title.append([])
-            # data_title = [data_buy[i] for i in range(start_idx, end_idx)]
-            data_title_word = []
-            for i in data_title:
-                tmp = []
-                if not i:
-                    tmp.append([0]*100)
-                else:
-                    for j in i:
-                        tmp.append(item_title[j].tolist())
-                data_title_word.append(tmp)
-            # max_item = max([len(i) for i in data_title])
+            purchased_items = list(data.nonzero()[1])
+            purchased_items_mask = np.zeros(max_item)
+            purchased_items_mask[:len(purchased_items)] = purchased_items
 
-            true_title = np.zeros((len(data_title), max_item, len(vocab2index)))
-            for i, c in enumerate(data_title_word):
-                for j, w in enumerate(c):
-                    true_title[i, j, w] = 1
-            true_title = torch.FloatTensor(true_title).to(device)
+            purchased_items_title = []
+            for idx, item in enumerate(list(purchased_items_mask)):
+                if np.sum(item) == 0 and idx >= len(purchased_items):
+                    purchased_items_title.append([0])
+                else:
+                    purchased_items_title.append(item_title[int(item)]['words'])
+
+            purchased_items_title_sorted = sorted(purchased_items_title, key=lambda p: len(p), reverse=True)
+            purchased_items_mask = Variable(torch.LongTensor(purchased_items_mask))
+
+            d = {}
+            for i, ci in enumerate(purchased_items_title):
+                for j, cj in enumerate(purchased_items_title_sorted):
+                    if ci == cj and not j in d and not i in d.values():
+                        d[j] = i
+                        continue
+            title_length = [len(c) for c in purchased_items_title_sorted]
+            title_maxl = max(title_length)
+            title_mask = np.zeros((len(purchased_items_mask), title_maxl), dtype='int')
+            for i, c in enumerate(purchased_items_title_sorted):
+                title_mask[i, :title_length[i]] = c
+            title_mask = Variable(torch.LongTensor(title_mask))
+
+            purchased_items_title_onehot = np.zeros((len(purchased_items_title), len(vocab2index)))
+            for i, c in enumerate(purchased_items_title):
+                purchased_items_title_onehot[i, c] = 1
+            purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
 
             if total_anneal_steps > 0:
                 anneal = min(args.anneal_cap,
@@ -384,14 +412,16 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 anneal = args.anneal_cap
 
             if args.mvae:
-                recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data_tensor, true_title)
-                loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
-                recon_batch_2, std_list_2, _, _, _ = model(data_tensor, None)
-                loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-                loss = loss_joint + loss_seq + cluster_loss
-                recon_batch = (recon_batch_2 + recon_batch_1) / 2
-                # loss = loss_joint
-                # recon_batch = recon_batch_1
+                recon_batch_1, std_list_1, items, recon_title, cluster_loss, std_list_title = \
+                    model(data_tensor, purchased_items_mask.to(device), title_mask.to(device), title_length, d)
+                loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
+                                       purchased_items_title_onehot, recon_title, std_list_title)
+                # recon_batch_2, std_list_2, _, _, _ = model(data_tensor, None)
+                # loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
+                # loss = loss_joint + loss_seq + cluster_loss
+                # recon_batch = (recon_batch_2 + recon_batch_1) / 2
+                loss = loss_joint + cluster_loss
+                recon_batch = recon_batch_1
             else:
                 recon_batch_2, std_list_2, _, _ = model(data_tensor, None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -493,12 +523,11 @@ try:
 
     if args.mvae:
         model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                     nogb=args.nogb, pre_word_embeds=None, centers=centers,
-                                     centers_title=centers_title).to(device)
+                                     nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None,
+                                     char_to_ix=vocab2index, vocab_size=len(item2index)).to(device)
     else:
         model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                     nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None).to(
-            device)
+                                     nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
     criterion = models_mvae.loss_function
@@ -506,7 +535,7 @@ try:
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
-        items = train(centers, centers_title)
+        items = train()
 
         # Performing decay on the learning rate
         if epoch % 100 == 0:
