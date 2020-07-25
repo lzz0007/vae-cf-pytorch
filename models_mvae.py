@@ -15,7 +15,7 @@ class MultiVAE(nn.Module):
     """
 
     def __init__(self, p_dims, q_dims=None, dropout=0.5, tau=0.1, std=0.075, kfac=7, nogb=False, pre_word_embeds=None,
-                 centers=None, centers_title=None):
+                 centers=None, centers_title=None, vocab_size=None):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
         if q_dims:
@@ -57,7 +57,7 @@ class MultiVAE(nn.Module):
         # nn.init.xavier_normal_(self.cores_title.data)
         # for title encoder
         # self.fc1_enc = nn.Embedding(17424, hidden_dim)
-        self.fc1_enc = nn.Linear(17424, hidden_dim)
+        self.fc1_enc = nn.Linear(vocab_size, hidden_dim)
         if pre_word_embeds is not None:
             self.fc1_enc.weight = nn.Parameter(pre_word_embeds)
         self.fc2_enc = nn.Linear(hidden_dim, hidden_dim)
@@ -67,7 +67,7 @@ class MultiVAE(nn.Module):
         self.fc1_dec = nn.Linear(100, hidden_dim)
         self.fc2_dec = nn.Linear(hidden_dim, hidden_dim)
         self.fc3_dec = nn.Linear(hidden_dim, hidden_dim)
-        self.fc4_dec = nn.Linear(hidden_dim, 102*17424)
+        self.fc4_dec = nn.Linear(hidden_dim, 102*vocab_size)
         self.swish = Swish()
 
         self.experts = ProductOfExperts()

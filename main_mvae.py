@@ -71,7 +71,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:3" if args.cuda else "cpu")
+device = torch.device("cuda:0" if args.cuda else "cpu")
 
 logging.basicConfig(filename='train_logs',
                             filemode='a',
@@ -134,7 +134,7 @@ category_id = np.array(dataset['category_id'])
 item_title = dataset['meta_titles']
 
 max_item = max([len(v) for k, v in train_buy.items()])
-max_word = 100
+max_word = max([len(i['words']) for i in item_title])
 # embeddings = torch.load('embeddings.pt')
 
 # load pretrained word embeddings
@@ -162,9 +162,7 @@ if args.mvae:
     #     for i, idx in enumerate(v):
     #         title_emb[k, i, :] = word_embeds[idx, :]
 
-    title_emb = np.zeros((len(item2index), len(vocab2index)))
-    for k, v in item_title.items():
-        title_emb[k, v] = 1
+    title_emb = item_mat.todense()
     X_std = StandardScaler().fit_transform(title_emb)
     # Create a PCA instance: pca
     pca = PCA(n_components=100, random_state=args.seed)
@@ -194,6 +192,22 @@ hidden_dim = 100
 # img_features_filtered = torch.load('images_filtered.pt')
 # img_features_filtered = torch.from_numpy(img_features_filtered).float().contiguous().to(device)
 
+###############################################################################
+# Build the model
+###############################################################################
+p_dims = [args.dfac, args.dfac, n_items]
+
+if args.mvae:
+    model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
+                                 nogb=args.nogb, pre_word_embeds=None, centers=centers,
+                                 centers_title=centers_title, vocab_size=len(vocab2index)).to(device)
+else:
+    model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
+                                 nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None).to(
+        device)
+
+optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
+criterion = models_mvae.loss_function
 
 ###############################################################################
 # Training code
@@ -238,32 +252,31 @@ def train(centers, centers_title):
 
         # seq
         data = train_data[idxlist[start_idx:end_idx]]
-        data = naive_sparse2tensor(data).to(device)
+        data_tensor = naive_sparse2tensor(data).to(device)
 
         # title
-        data_title = []
-        for i in range(start_idx, end_idx):
-            if i in train_buy: # what items did the user purchase
-                data_title.append(train_buy[i])
-            else:
-                data_title.append([])
-        # data_title = [data_buy[i] for i in range(start_idx, end_idx)]
-        data_title_word = [] # word index that each item has
-        for i in data_title:
-            tmp = []
-            if not i:
-                tmp.append([0] * 100)
-            else:
-                for j in i:
-                    tmp.append(item_title[j].tolist())
-            data_title_word.append(tmp)
-        # data_title = [train_buy[i] for i in range(start_idx, end_idx)]
+        purchased_items = []
+        for i in range(data.shape[0]):
+            purchased_items.append(list(data[i].nonzero()[1]))
+        purchased_items_title = [] # word index that each item has
+        for items in purchased_items:
+            w = []
+            for item in items:
+                w.append(item_title[int(item)]['words'])
+            purchased_items_title.append(w)
 
-        true_title = np.zeros((len(data_title), max_item, len(vocab2index))) # 100x102x17424
-        for i, c in enumerate(data_title_word):
-            for j, w in enumerate(c):
-                true_title[i, j, w] = 1
-        true_title = torch.FloatTensor(true_title).to(device)
+        purchased_items_title_onehot = np.zeros((data.shape[0], max_item, len(vocab2index)))
+
+        for i, u in enumerate(purchased_items_title):
+            for j, items in enumerate(u):
+                purchased_items_title_onehot[i, j, items] = 1
+        purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
+
+        # true_title = np.zeros((data.shape[0], max_item, len(vocab2index))) # 100x102x17424
+        # for i, c in enumerate(data_title_word):
+        #     for j, w in enumerate(c):
+        #         true_title[i, j, w] = 1
+        # true_title = torch.FloatTensor(true_title).to(device)
 
         # anneal
         if total_anneal_steps > 0:
@@ -276,10 +289,11 @@ def train(centers, centers_title):
         optimizer.zero_grad()
 
         if args.mvae:
-            recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data, true_title)
-            loss_joint = criterion(data, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
-            recon_batch_2, std_list_2, _, _, _ = model(data, None)
-            loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
+            recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data_tensor, purchased_items_title_onehot)
+            loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
+                                   title=purchased_items_title_onehot, recon_title=recon_title)
+            recon_batch_2, std_list_2, _, _, _ = model(data_tensor, None)
+            loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
             loss = loss_joint + loss_seq + cluster_loss
             # loss = loss_joint
         else:
@@ -353,29 +367,28 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
             data_tensor = naive_sparse2tensor(data).to(device)
 
             # title
-            data_title = []
-            for i in range(start_idx, end_idx):
-                if i in data_buy:
-                    data_title.append(data_buy[i])
-                else:
-                    data_title.append([])
-            # data_title = [data_buy[i] for i in range(start_idx, end_idx)]
-            data_title_word = []
-            for i in data_title:
-                tmp = []
-                if not i:
-                    tmp.append([0]*100)
-                else:
-                    for j in i:
-                        tmp.append(item_title[j].tolist())
-                data_title_word.append(tmp)
-            # max_item = max([len(i) for i in data_title])
+            purchased_items = []
+            for i in range(data.shape[0]):
+                purchased_items.append(list(data[i].nonzero()[1]))
+            purchased_items_title = []  # word index that each item has
+            for items in purchased_items:
+                w = []
+                for item in items:
+                    w.append(item_title[int(item)]['words'])
+                purchased_items_title.append(w)
 
-            true_title = np.zeros((len(data_title), max_item, len(vocab2index)))
-            for i, c in enumerate(data_title_word):
-                for j, w in enumerate(c):
-                    true_title[i, j, w] = 1
-            true_title = torch.FloatTensor(true_title).to(device)
+            purchased_items_title_onehot = np.zeros((data.shape[0], max_item, len(vocab2index)))
+
+            for i, u in enumerate(purchased_items_title):
+                for j, items in enumerate(u):
+                    purchased_items_title_onehot[i, j, items] = 1
+            purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
+
+            # true_title = np.zeros((data.shape[0], max_item, len(vocab2index))) # 100x102x17424
+            # for i, c in enumerate(data_title_word):
+            #     for j, w in enumerate(c):
+            #         true_title[i, j, w] = 1
+            # true_title = torch.FloatTensor(true_title).to(device)
 
             if total_anneal_steps > 0:
                 anneal = min(args.anneal_cap,
@@ -384,8 +397,9 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 anneal = args.anneal_cap
 
             if args.mvae:
-                recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data_tensor, true_title)
-                loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal, title=true_title, recon_title=recon_title)
+                recon_batch_1, std_list_1, items, recon_title, cluster_loss = model(data_tensor, purchased_items_title_onehot)
+                loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
+                                       title=purchased_items_title_onehot, recon_title=recon_title)
                 recon_batch_2, std_list_2, _, _, _ = model(data_tensor, None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
                 loss = loss_joint + loss_seq + cluster_loss
@@ -494,7 +508,7 @@ try:
     if args.mvae:
         model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
                                      nogb=args.nogb, pre_word_embeds=None, centers=centers,
-                                     centers_title=centers_title).to(device)
+                                     centers_title=centers_title, vocab_size=len(vocab2index)).to(device)
     else:
         model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
                                      nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None).to(
@@ -509,7 +523,7 @@ try:
         items = train(centers, centers_title)
 
         # Performing decay on the learning rate
-        if epoch % 100 == 0:
+        if epoch % 101 == 0:
             adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * epoch / 20))
 
         # evaluate
