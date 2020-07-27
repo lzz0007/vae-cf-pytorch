@@ -5,7 +5,7 @@ import numpy as np
 from torch.autograd import Variable
 import random
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class MultiVAE(nn.Module):
     """
@@ -169,16 +169,18 @@ class MultiVAE(nn.Module):
                 # mu_k, std_k, lnvarq_k = self.encode_combined(combined_k)
                 mu_title, std_title, lnvarq_title = self.encode_title(title_k.view(1, -1))  # 1x100
 
-                mu_k = torch.cat((mu_seq_k, mu_title), dim=0)  # 3x100x100
-                std_k = torch.cat((std_seq_k, std_title), dim=0)
+                mu_k = torch.cat((mu_seq_k, mu_title), dim=0)  # 2x100
+                std_k = torch.cat((std_seq_k, std_title), dim=0) # 2x100
 
                 # product of gaussians
                 mu_k, std_k = self.experts(mu_k, std_k)  # 1x100
+                mu_k = mu_k.unsqueeze(0)
+                std_k = std_k.unsqueeze(0)
             else:
                 mu_k, std_k = mu_seq_k, std_seq_k
 
             # zk embedding
-            z_k = self.reparameterize(mu_k, std_k).unsqueeze(0)  # 1x100
+            z_k = self.reparameterize(mu_k, std_k)  # 1x100
 
             # seq decoder
             z_k = F.normalize(z_k)  # 1x100
@@ -331,7 +333,7 @@ class MultiVAE(nn.Module):
         k = self.cores.shape[0]
         cores = F.normalize(self.cores)
         cores_title = F.normalize(self.cores_title)
-        tot_loss = 0
+        tot_loss = torch.zeros((1,1)).to(device)
         for i in range(k):
             pos_similarity = torch.mm(cores[i, :].unsqueeze(0), cores_title[i, :].unsqueeze(1))
             neg = np.random.randint(k)
@@ -434,22 +436,23 @@ def loss_function(x, std_list, recon_x, anneal, title, recon_title, std_list_tit
     # BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
     # KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     recon_loss = torch.mean(torch.sum(-F.log_softmax(recon_x, 1) * x, -1))
-    kl, kl_t = None, None
+    kl = None
     for i in range(len(std_list)):
         lnvarq_sub_lnvar0 = std_list[i]
         kl_k = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
         kl = (kl_k if (kl is None) else (kl + kl_k))
     # neg_elbo = recon_loss + anneal * kl
     recon_loss_title = 0
+    kl_t = 0
     if recon_title is not None:
         # recon_loss_title = torch.sum(cross_entropy(recon_title, title), dim=1)
         recon_loss_title = torch.sum(torch.mean(torch.sum(-F.log_softmax(recon_title, -1), 1) * title, -1))
-    for i in range(len(std_list_title)):
-        lnvarq_sub_lnvar0 = std_list_title[i]
-        kl_k_t = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
-        kl_t = (kl_k_t if (kl is None) else (kl + kl_k_t))
+        for i in range(len(std_list_title)):
+            lnvarq_sub_lnvar0 = std_list_title[i]
+            kl_k_t = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
+            kl_t = (kl_k_t if (kl is None) else (kl + kl_k_t))
 
-    return recon_loss + anneal * kl + 0.1*recon_loss_title + anneal * kl_t
+    return recon_loss, anneal * kl, recon_loss_title, anneal * kl_t
 
 
 # def prior_expert(size, use_cuda=False):

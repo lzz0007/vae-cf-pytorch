@@ -72,8 +72,8 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:1" if args.cuda else "cpu")
-
+device = torch.device("cuda:0" if args.cuda else "cpu")
+print(device)
 logging.basicConfig(filename='train_logs',
                             filemode='a',
                             format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
@@ -233,6 +233,8 @@ def train():
     global update_count
 
     np.random.shuffle(idxlist)
+    print(update_count)
+    recon_losses, kl_losses, recon_losses_title, kl_t_losses, cluster_losses = [], [], [], [], []
 
     for batch_idx, start_idx in enumerate(range(0, N, args.batch_size)):
         end_idx = min(start_idx + args.batch_size, N)
@@ -286,7 +288,7 @@ def train():
         # anneal
         if total_anneal_steps > 0:
             anneal = min(args.anneal_cap,
-                         1. * update_count / total_anneal_steps)
+                         100 * update_count / total_anneal_steps)
         else:
             anneal = args.anneal_cap
 
@@ -296,12 +298,24 @@ def train():
         if args.mvae:
             recon_batch_1, std_list_1, items, recon_title, cluster_loss, std_list_title = \
                 model(data_tensor, purchased_items_mask.to(device), title_mask.to(device), title_length, d)
-            loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
+            recon_loss, kl, recon_loss_title, kl_t = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
                                    purchased_items_title_onehot, recon_title, std_list_title)
-            # recon_batch_2, std_list_2, _, _, _ = model(data, None)
-            # loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-            # loss = loss_joint + loss_seq + cluster_loss
-            loss = loss_joint + cluster_loss
+            loss_joint = recon_loss + kl + recon_loss_title + kl_t
+
+            recon_batch_2, std_list_2, _, _, _, _ = model(data_tensor, None, None, None, None)
+            recon_loss_2, kl_2, _, _ = criterion(data_tensor, std_list_2, recon_batch_2, anneal,
+                                                 purchased_items_title_onehot, None, None)
+            loss_seq = recon_loss_2 + kl_2
+
+            loss = loss_joint + loss_seq + cluster_loss
+            # loss = loss_joint + cluster_loss
+
+            recon_losses.append(recon_loss.item())
+            kl_losses.append(kl.item())
+            recon_losses_title.append(recon_loss_title.item())
+            kl_t_losses.append(kl_t.item())
+            cluster_losses.append(cluster_loss.item())
+
         else:
             recon_batch_2, std_list_2, items, _ = model(data, None)
             loss_seq = criterion(data, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -341,7 +355,7 @@ def train():
     # titles_words = model.fc1_enc.weight
     # print(titles_words.shape)
 
-    return items
+    return items, np.mean(recon_losses), np.mean(kl_losses), np.mean(recon_losses_title), np.mean(kl_t_losses), np.mean(cluster_losses)
 
 
 def evaluate(data_tr, data_te, data_buy, centers, centers_title):
@@ -412,16 +426,37 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 anneal = args.anneal_cap
 
             if args.mvae:
+                # recon_batch_1, std_list_1, items, recon_title, cluster_loss, std_list_title = \
+                #     model(data_tensor, purchased_items_mask.to(device), title_mask.to(device), title_length, d)
+                # loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
+                #                        purchased_items_title_onehot, recon_title, std_list_title)
+                # # recon_batch_2, std_list_2, _, _, _ = model(data_tensor, None)
+                # # loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
+                # # loss = loss_joint + loss_seq + cluster_loss
+                # # recon_batch = (recon_batch_2 + recon_batch_1) / 2
+                # loss = loss_joint + cluster_loss
+                # recon_batch = recon_batch_1
+
                 recon_batch_1, std_list_1, items, recon_title, cluster_loss, std_list_title = \
                     model(data_tensor, purchased_items_mask.to(device), title_mask.to(device), title_length, d)
-                loss_joint = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
-                                       purchased_items_title_onehot, recon_title, std_list_title)
-                # recon_batch_2, std_list_2, _, _, _ = model(data_tensor, None)
-                # loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
-                # loss = loss_joint + loss_seq + cluster_loss
-                # recon_batch = (recon_batch_2 + recon_batch_1) / 2
-                loss = loss_joint + cluster_loss
-                recon_batch = recon_batch_1
+                recon_loss, kl, recon_loss_title, kl_t = criterion(data_tensor, std_list_1, recon_batch_1, anneal,
+                                                                   purchased_items_title_onehot, recon_title,
+                                                                   std_list_title)
+                loss_joint = recon_loss + kl + recon_loss_title + kl_t
+
+                recon_batch_2, std_list_2, _, _, _, _ = model(data_tensor, None, None, None, None)
+                recon_loss_2, kl_2, _, _ = criterion(data_tensor, std_list_2, recon_batch_2, anneal,
+                                                     purchased_items_title_onehot, None, None)
+                loss_seq = recon_loss_2 + kl_2
+
+                loss = loss_joint + loss_seq + cluster_loss
+                recon_batch = (recon_batch_1 + recon_batch_2) * 0.5
+
+                # recon_losses.append(recon_loss.item())
+                # kl_losses.append(kl.item())
+                # recon_losses_title.append(recon_loss_title.item())
+                # kl_t_losses.append(kl_t.item())
+                # cluster_losses.append(cluster_loss.item())
             else:
                 recon_batch_2, std_list_2, _, _ = model(data_tensor, None)
                 loss_seq = criterion(data_tensor, std_list_2, recon_batch_2, anneal, title=None, recon_title=None)
@@ -531,11 +566,13 @@ try:
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
     criterion = models_mvae.loss_function
+
     # disentangled
+    recon_losses, kl_losses, recon_losses_title, kl_t_losses, cluster_losses = [], [], [], [], []
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
         # train
-        items = train()
+        items, recon_loss, kl, recon_loss_title, kl_t, cluster_loss = train()
 
         # Performing decay on the learning rate
         if epoch % 100 == 0:
@@ -556,6 +593,7 @@ try:
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
                 epoch, time.time() - epoch_start_time, val_loss,
                 n100, r20, r50))
+        print('recon loss {:4.5f} | kl {:4.5f} | recon loss title {:4.5f} | kl title {:4.5f} | cluster loss {:4.5f}'.format(recon_loss, kl, recon_loss_title, kl_t, cluster_loss))
         print('-' * 89)
 
         n_iter = epoch * len(range(0, N, args.batch_size))
