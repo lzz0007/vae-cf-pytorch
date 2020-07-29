@@ -244,46 +244,70 @@ def train():
         data_tensor = naive_sparse2tensor(data).to(device) # batchx13015
 
         # title
-        # purchased_items = []
-        # for i in range(data.shape[0]):
-        #     purchased_items.append(list(data[i].nonzero()[1]))
-        # purchased_items_title = [] # word index that each item has
-        # for items in purchased_items:
-        #     w = []
-        #     for item in items:
-        #         w.append(item_title[item]['words'])
-        #     purchased_items_title.append(w)
-        purchased_items = list(data.nonzero()[1])
-        purchased_items_mask = np.zeros(max_item)
-        purchased_items_mask[:len(purchased_items)] = purchased_items
+        if args.batch_size > 1:
+            purchased_items = []
+            for i in range(data.shape[0]):
+                purchased_items.append(list(data[i].nonzero()[1]))
+            purchased_items_title = [] # word index that each item has
+            for items in purchased_items:
+                w = []
+                for item in items:
+                    w.append(item_title[item]['words'])
+                purchased_items_title.append(w)
 
-        purchased_items_title = []
-        for idx, item in enumerate(list(purchased_items_mask)):
-            if np.sum(item) == 0 and idx >= len(purchased_items):
-                purchased_items_title.append([0])
-            else:
-                purchased_items_title.append(item_title[int(item)]['words'])
+            for user in purchased_items_title:
+                purchased_items_title_sorted = sorted(user, key=lambda p: len(p), reverse=True)
 
-        purchased_items_title_sorted = sorted(purchased_items_title, key=lambda p: len(p), reverse=True)
-        purchased_items_mask = Variable(torch.LongTensor(purchased_items_mask).to(device))
+                d = {}
+                for i, ci in enumerate(user):
+                    for j, cj in enumerate(purchased_items_title_sorted):
+                        if ci == cj and not j in d and not i in d.values():
+                            d[j] = i
+                            continue
+                title_length = [len(c) for c in purchased_items_title_sorted]
+                title_maxl = max(title_length)
+                title_mask = np.zeros((len(purchased_items_title_sorted), title_maxl), dtype='int')
+                for i, c in enumerate(purchased_items_title_sorted):
+                    title_mask[i, :title_length[i]] = c
 
-        d = {}
-        for i, ci in enumerate(purchased_items_title):
-            for j, cj in enumerate(purchased_items_title_sorted):
-                if ci == cj and not j in d and not i in d.values():
-                    d[j] = i
-                    continue
-        title_length = [len(c) for c in purchased_items_title_sorted]
-        title_maxl = max(title_length)
-        title_mask = np.zeros((len(purchased_items_title_sorted), title_maxl), dtype='int')
-        for i, c in enumerate(purchased_items_title_sorted):
-            title_mask[i, :title_length[i]] = c
-        title_mask = Variable(torch.LongTensor(title_mask).to(device))
+            purchased_items_title_onehot = np.zeros((data.shape[0], max_item, len(vocab2index)))
+            for i, u in enumerate(purchased_items_title):
+                for j, items in enumerate(u):
+                    purchased_items_title_onehot[i, j, items] = 1
+            purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
 
-        purchased_items_title_onehot = np.zeros((len(purchased_items_title), len(vocab2index)))
-        for i, c in enumerate(purchased_items_title):
-            purchased_items_title_onehot[i, c] = 1
-        purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
+        elif args.batch_size == 1:
+            purchased_items = list(data.nonzero()[1])
+            purchased_items_mask = np.zeros(max_item)
+            purchased_items_mask[:len(purchased_items)] = purchased_items
+
+            purchased_items_title = []
+            for idx, item in enumerate(list(purchased_items_mask)):
+                if np.sum(item) == 0 and idx >= len(purchased_items):
+                    purchased_items_title.append([0])
+                else:
+                    purchased_items_title.append(item_title[int(item)]['words'])
+
+            purchased_items_title_sorted = sorted(purchased_items_title, key=lambda p: len(p), reverse=True)
+            purchased_items_mask = Variable(torch.LongTensor(purchased_items_mask).to(device))
+
+            d = {}
+            for i, ci in enumerate(purchased_items_title):
+                for j, cj in enumerate(purchased_items_title_sorted):
+                    if ci == cj and not j in d and not i in d.values():
+                        d[j] = i
+                        continue
+            title_length = [len(c) for c in purchased_items_title_sorted]
+            title_maxl = max(title_length)
+            title_mask = np.zeros((len(purchased_items_title_sorted), title_maxl), dtype='int')
+            for i, c in enumerate(purchased_items_title_sorted):
+                title_mask[i, :title_length[i]] = c
+            title_mask = Variable(torch.LongTensor(title_mask).to(device))
+
+            purchased_items_title_onehot = np.zeros((len(purchased_items_title), len(vocab2index)))
+            for i, c in enumerate(purchased_items_title):
+                purchased_items_title_onehot[i, c] = 1
+            purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
 
         # anneal
         if total_anneal_steps > 0:
@@ -302,9 +326,8 @@ def train():
                                    purchased_items_title_onehot, recon_title, std_list_title)
             loss_joint = recon_loss + kl + recon_loss_title + kl_t
 
-            recon_batch_2, std_list_2, _, _, _, _ = model(data_tensor, None, None, None, None)
-            recon_loss_2, kl_2, _, _ = criterion(data_tensor, std_list_2, recon_batch_2, anneal,
-                                                 purchased_items_title_onehot, None, None)
+            recon_batch_2, std_list_2, items, _, _, _ = model(data_tensor, None, None, None, None)
+            recon_loss_2, kl_2, _, _ = criterion(data_tensor, std_list_2, recon_batch_2, anneal, None, None, None)
             loss_seq = recon_loss_2 + kl_2
 
             loss = loss_joint + loss_seq + cluster_loss
@@ -354,7 +377,7 @@ def train():
     # title word embeddings
     # titles_words = model.fc1_enc.weight
     # print(titles_words.shape)
-
+    # return items
     return items, np.mean(recon_losses), np.mean(kl_losses), np.mean(recon_losses_title), np.mean(kl_t_losses), np.mean(cluster_losses)
 
 
@@ -445,8 +468,7 @@ def evaluate(data_tr, data_te, data_buy, centers, centers_title):
                 loss_joint = recon_loss + kl + recon_loss_title + kl_t
 
                 recon_batch_2, std_list_2, _, _, _, _ = model(data_tensor, None, None, None, None)
-                recon_loss_2, kl_2, _, _ = criterion(data_tensor, std_list_2, recon_batch_2, anneal,
-                                                     purchased_items_title_onehot, None, None)
+                recon_loss_2, kl_2, _, _ = criterion(data_tensor, std_list_2, recon_batch_2, anneal, None, None, None)
                 loss_seq = recon_loss_2 + kl_2
 
                 loss = loss_joint + loss_seq + cluster_loss
@@ -573,7 +595,7 @@ try:
         epoch_start_time = time.time()
         # train
         items, recon_loss, kl, recon_loss_title, kl_t, cluster_loss = train()
-
+        # items = train()
         # Performing decay on the learning rate
         if epoch % 100 == 0:
             adjust_learning_rate(optimizer, lr=args.lr / (1 + decay_rate * epoch / 20))
@@ -593,7 +615,7 @@ try:
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
                 epoch, time.time() - epoch_start_time, val_loss,
                 n100, r20, r50))
-        print('recon loss {:4.5f} | kl {:4.5f} | recon loss title {:4.5f} | kl title {:4.5f} | cluster loss {:4.5f}'.format(recon_loss, kl, recon_loss_title, kl_t, cluster_loss))
+        # print('recon loss {:4.5f} | kl {:4.5f} | recon loss title {:4.5f} | kl title {:4.5f} | cluster loss {:4.5f}'.format(recon_loss, kl, recon_loss_title, kl_t, cluster_loss))
         print('-' * 89)
 
         n_iter = epoch * len(range(0, N, args.batch_size))

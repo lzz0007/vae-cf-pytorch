@@ -86,8 +86,8 @@ class MultiVAE(nn.Module):
 
         # lstm encoding for item
         self.word_embeds = nn.Embedding(vocab_size, self.hidden_dim)
-        self.lstm = nn.LSTM(self.hidden_dim + self.hidden_dim * 2, self.hidden_dim, bidirectional=True)
-        init_lstm(self.lstm)
+        # self.lstm = nn.LSTM(self.hidden_dim + self.hidden_dim * 2, self.hidden_dim, bidirectional=True)
+        # init_lstm(self.lstm)
 
         # lstm decoding for item
 
@@ -137,10 +137,10 @@ class MultiVAE(nn.Module):
             concat_embeds = concat_embeds.unsqueeze(1)
             concat_embeds = self.dropout(concat_embeds) # itemx1x300 - batch size is 1
 
-            lstm_out, _ = self.lstm(concat_embeds) # itemx1x200
-            lstm_out = lstm_out.view(len(purchased_items), self.hidden_dim * 2) # itemx200
+            # lstm_out, _ = self.lstm(concat_embeds) # itemx1x200
+            # lstm_out = lstm_out.view(len(purchased_items), self.hidden_dim * 2) # itemx200
 
-            title_emb = torch.tanh(self.linear_title(lstm_out))
+            title_emb = torch.tanh(self.linear_title(concat_embeds))
             title_emb = self.dropout(title_emb)
 
             title_emb = F.normalize(title_emb)
