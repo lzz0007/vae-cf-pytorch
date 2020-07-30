@@ -43,14 +43,14 @@ class DataLoader():
                                  (rows, cols)), dtype='float64',
                                  shape=(n_users, self.n_items))
         df = tp.drop_duplicates(keep='first')
-        res = dict()
-        for i, row in df.iterrows():
-            if row['uid'] in res:
-                res[row['uid']].append(row['sid'])
-            else:
-                res[row['uid']] = [row['sid']]
+        # res = dict()
+        # for i, row in df.iterrows():
+        #     if row['uid'] in res:
+        #         res[row['uid']].append(row['sid'])
+        #     else:
+        #         res[row['uid']] = [row['sid']]
 
-        return data, res
+        return data
     
     def _load_tr_te_data(self, datatype='test'):
         tr_path = os.path.join(self.pro_dir, '{}_tr.csv'.format(datatype))
@@ -70,14 +70,14 @@ class DataLoader():
         data_te = sparse.csr_matrix((np.ones_like(rows_te),
                                     (rows_te, cols_te)), dtype='float64', shape=(end_idx - start_idx + 1, self.n_items))
 
-        df = tp_tr.drop_duplicates(keep='first')
-        res = dict()
-        for i, row in df.iterrows():
-            if (row['uid']-start_idx) in res:
-                res[row['uid']-start_idx].append(row['sid'])
-            else:
-                res[row['uid']-start_idx] = [row['sid']]
-        return data_tr, data_te, res
+        # df = tp_tr.drop_duplicates(keep='first')
+        # res = dict()
+        # for i, row in df.iterrows():
+        #     if (row['uid']-start_idx) in res:
+        #         res[row['uid']-start_idx].append(row['sid'])
+        #     else:
+        #         res[row['uid']-start_idx] = [row['sid']]
+        return data_tr, data_te
 
 
 def get_count(tp, id):
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     dataset = {0: 'ml-latest-small', 1: 'ml-1m', 2: 'ml-20m', 3: 'netflix', 4: 'amazon'}
 
     n_heldout_users = (50, 500, 10000, 40000, 900)[which_dataset_to_use]
-    DATA_DIR = '%s/' % dataset[which_dataset_to_use]
+    DATA_DIR = 'data/%s/' % dataset[which_dataset_to_use]
     print("Load and Preprocess %s dataset" % dataset[which_dataset_to_use])
 
     # Load Data
@@ -151,6 +151,7 @@ if __name__ == '__main__':
 
     # Filter Data
     raw_data, user_activity, item_popularity = filter_triplets(raw_data)
+    raw_data = raw_data.drop_duplicates(subset=['movieId', 'userId'], keep='first')
 
     # Shuffle User Indices
     unique_uid = user_activity.index

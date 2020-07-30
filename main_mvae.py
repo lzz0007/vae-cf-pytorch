@@ -102,24 +102,24 @@ total_anneal_steps = 5 * num_batches
 ###############################################################################
 # kmeans for interaction data
 ###############################################################################
-# Standardize the data to have a mean of ~0 and a variance of 1
-X_std = StandardScaler().fit_transform(train_data.transpose().todense())
-# Create a PCA instance: pca
-pca = PCA(n_components=100, random_state=args.seed)
-principalComponents = pca.fit_transform(X_std)
-# Save components to a DataFrame
-PCA_components = pd.DataFrame(principalComponents)
-
-print('start doing Kmedoids for interaction')
-kmedoids = KMedoids(n_clusters=6, random_state=args.seed).fit(PCA_components)
-print(Counter(kmedoids.labels_).keys())
-print(Counter(kmedoids.labels_).values())
-kmedoids_center = kmedoids.cluster_centers_
-labels = np.array(list(set(kmedoids.labels_)))
-kmedoids_center = kmedoids_center[labels]
-centers = torch.FloatTensor(kmedoids_center).to(device)
-kfac = len(labels)
-print('no of clusters:', kfac)
+# # Standardize the data to have a mean of ~0 and a variance of 1
+# X_std = StandardScaler().fit_transform(train_data.transpose().todense())
+# # Create a PCA instance: pca
+# pca = PCA(n_components=100, random_state=args.seed)
+# principalComponents = pca.fit_transform(X_std)
+# # Save components to a DataFrame
+# PCA_components = pd.DataFrame(principalComponents)
+#
+# print('start doing Kmedoids for interaction')
+# kmedoids = KMedoids(n_clusters=6, random_state=args.seed).fit(PCA_components)
+# print(Counter(kmedoids.labels_).keys())
+# print(Counter(kmedoids.labels_).values())
+# kmedoids_center = kmedoids.cluster_centers_
+# labels = np.array(list(set(kmedoids.labels_)))
+# kmedoids_center = kmedoids_center[labels]
+# centers = torch.FloatTensor(kmedoids_center).to(device)
+# kfac = len(labels)
+# print('no of clusters:', kfac)
 
 ###############################################################################
 # load item title
@@ -140,48 +140,48 @@ max_word = max([len(i['words']) for i in item_title])
 # embeddings = torch.load('embeddings.pt')
 
 # load pretrained word embeddings
-if args.mvae:
-    # import codecs
-    # all_word_embeds = {}
-    # for i, line in enumerate(codecs.open('data/glove.6B.100d.txt', 'r', 'utf-8')):
-    #     s = line.strip().split()
-    #     if len(s) == args.dfac + 1:
-    #         all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
-    #
-    # # Intializing Word Embedding Matrix
-    # word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(vocab2index), args.dfac))
-    # for w in vocab2index:
-    #     if w in all_word_embeds:
-    #         word_embeds[vocab2index[w]] = all_word_embeds[w]
-    #     elif w.lower() in all_word_embeds:
-    #         word_embeds[vocab2index[w]] = all_word_embeds[w.lower()]
-    #
-    # print('Loaded %i pretrained embeddings.' % len(word_embeds))
-    # del all_word_embeds
-    #
-    # title_emb = np.zeros((len(item_title), max_word, 100))
-    # for k, v in item_title.items():
-    #     for i, idx in enumerate(v):
-    #         title_emb[k, i, :] = word_embeds[idx, :]
-
-    title_emb = item_mat.todense()
-    X_std = StandardScaler().fit_transform(title_emb)
-    # Create a PCA instance: pca
-    pca = PCA(n_components=100, random_state=args.seed)
-    principalComponents = pca.fit_transform(X_std)
-    # Save components to a DataFrame
-    PCA_components = pd.DataFrame(principalComponents)
-
-    print('start doing Kmedoids for title')
-    kmedoids = KMedoids(n_clusters=kfac, random_state=args.seed).fit(PCA_components)
-    print(Counter(kmedoids.labels_).keys())
-    print(Counter(kmedoids.labels_).values())
-    kmedoids_center = kmedoids.cluster_centers_
-    labels = np.array(list(set(kmedoids.labels_)))
-    kmedoids_center = kmedoids_center[labels]
-    centers_title = torch.FloatTensor(kmedoids_center).to(device) # 6x100
-else:
-    centers_title = None
+# if args.mvae:
+#     # import codecs
+#     # all_word_embeds = {}
+#     # for i, line in enumerate(codecs.open('data/glove.6B.100d.txt', 'r', 'utf-8')):
+#     #     s = line.strip().split()
+#     #     if len(s) == args.dfac + 1:
+#     #         all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
+#     #
+#     # # Intializing Word Embedding Matrix
+#     # word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(vocab2index), args.dfac))
+#     # for w in vocab2index:
+#     #     if w in all_word_embeds:
+#     #         word_embeds[vocab2index[w]] = all_word_embeds[w]
+#     #     elif w.lower() in all_word_embeds:
+#     #         word_embeds[vocab2index[w]] = all_word_embeds[w.lower()]
+#     #
+#     # print('Loaded %i pretrained embeddings.' % len(word_embeds))
+#     # del all_word_embeds
+#     #
+#     # title_emb = np.zeros((len(item_title), max_word, 100))
+#     # for k, v in item_title.items():
+#     #     for i, idx in enumerate(v):
+#     #         title_emb[k, i, :] = word_embeds[idx, :]
+#
+#     title_emb = item_mat.todense()
+#     X_std = StandardScaler().fit_transform(title_emb)
+#     # Create a PCA instance: pca
+#     pca = PCA(n_components=100, random_state=args.seed)
+#     principalComponents = pca.fit_transform(X_std)
+#     # Save components to a DataFrame
+#     PCA_components = pd.DataFrame(principalComponents)
+#
+#     print('start doing Kmedoids for title')
+#     kmedoids = KMedoids(n_clusters=kfac, random_state=args.seed).fit(PCA_components)
+#     print(Counter(kmedoids.labels_).keys())
+#     print(Counter(kmedoids.labels_).values())
+#     kmedoids_center = kmedoids.cluster_centers_
+#     labels = np.array(list(set(kmedoids.labels_)))
+#     kmedoids_center = kmedoids_center[labels]
+#     centers_title = torch.FloatTensor(kmedoids_center).to(device) # 6x100
+# else:
+#     centers_title = None
 
 # titles = torch.from_numpy(embeddings).float().contiguous().to(device)
 
@@ -381,7 +381,7 @@ def train():
     return items, np.mean(recon_losses), np.mean(kl_losses), np.mean(recon_losses_title), np.mean(kl_t_losses), np.mean(cluster_losses)
 
 
-def evaluate(data_tr, data_te, data_buy, centers, centers_title):
+def evaluate(data_tr, data_te):
     # data_tr = vad_data_tr
     # data_te = vad_data_te
     # data_buy = vad_buy
@@ -579,12 +579,12 @@ try:
     p_dims = [args.dfac, args.dfac, n_items]
 
     if args.mvae:
-        model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                     nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None,
+        model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac,
+                                     nogb=args.nogb, pre_word_embeds=None,
                                      char_to_ix=vocab2index, vocab_size=len(item2index)).to(device)
     else:
-        model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=kfac,
-                                     nogb=args.nogb, pre_word_embeds=None, centers=centers, centers_title=None).to(device)
+        model = models_mvae.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau, std=args.std, kfac=args.kfac,
+                                     nogb=args.nogb, pre_word_embeds=None).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
     criterion = models_mvae.loss_function
@@ -604,12 +604,10 @@ try:
         # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         if args.mvae:
             val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te, vad_buy,
-                                                                         centers, centers_title)
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te)
         else:
             val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te, vad_buy,
-                                                                         centers, None)
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
               'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
@@ -666,10 +664,10 @@ with open(args.save, 'rb') as f:
 # test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
 if args.mvae:
     test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy, centers, centers_title)
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy)
 else:
     test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy, centers, None)
+            r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te, test_buy)
 
 print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '

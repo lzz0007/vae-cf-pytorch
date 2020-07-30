@@ -10,17 +10,19 @@ from scipy import sparse
 import models
 import data
 import metric
+import os
+import pickle
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
-parser.add_argument('--data', type=str, default='ml-1m',
+parser.add_argument('--data', type=str, default='data/amazon',
                     help='Movielens-20m dataset location')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
 parser.add_argument('--wd', type=float, default=0.001,
                     help='weight decay coefficient')
-parser.add_argument('--batch_size', type=int, default=500,
+parser.add_argument('--batch_size', type=int, default=1,
                     help='batch size')
-parser.add_argument('--epochs', type=int, default=500,
+parser.add_argument('--epochs', type=int, default=100,
                     help='upper epoch limit')
 parser.add_argument('--total_anneal_steps', type=int, default=200000,
                     help='the total number of gradient updates for annealing')
@@ -30,11 +32,13 @@ parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=500, metavar='N',
+parser.add_argument('--log-interval', type=int, default=1000, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
 args = parser.parse_args()
+# args = parser.parse_known_args()
+# args = args[0]
 
 # Set the random seed manually for reproductibility.
 torch.manual_seed(args.seed)
@@ -42,7 +46,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda" if args.cuda else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ###############################################################################
 # Load data
@@ -61,11 +65,27 @@ idxlist = list(range(N))
 num_batches = int(np.ceil(float(N) / args.batch_size))
 total_anneal_steps = 5 * num_batches
 ###############################################################################
+# load item title
+###############################################################################
+with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
+    dataset = pickle.load(f)
+
+item_mat = dataset['meta_mat']
+vocab2index = dataset['vocab2index']
+cat2index = dataset['cat2index']
+item2index = dataset['item2index']
+category_id = np.array(dataset['category_id'])
+item_title = dataset['meta_titles']
+
+max_item = int(max(train_data.sum(axis=1)))
+max_word = max([len(i['words']) for i in item_title])
+
+###############################################################################
 # Build the model
 ###############################################################################
 
 p_dims = [100, 100, n_items]
-model = models.MultiVAE(p_dims).to(device)
+model = models.MultiVAE(p_dims, q_dims=None, dropout=0.5, vocab_size=len(vocab2index), tot_items=len(item2index)).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.wd)
 criterion = models.loss_function
@@ -111,19 +131,56 @@ def train():
     
     for batch_idx, start_idx in enumerate(range(0, N, args.batch_size)):
         end_idx = min(start_idx + args.batch_size, N)
-        data = train_data[idxlist[start_idx:end_idx]]
-        data = naive_sparse2tensor(data).to(device)
 
+        # seq
+        data = train_data[idxlist[start_idx:end_idx]]
+        data_tensor = naive_sparse2tensor(data).to(device)
+
+        # title
+        purchased_items = list(data.nonzero()[1])
+        purchased_items_mask = np.zeros(max_item)
+        purchased_items_mask[:len(purchased_items)] = purchased_items
+
+        purchased_items_title = []
+        for idx, item in enumerate(list(purchased_items_mask)):
+            if np.sum(item) == 0 and idx >= len(purchased_items):
+                purchased_items_title.append([0])
+            else:
+                purchased_items_title.append(item_title[int(item)]['words'])
+
+        purchased_items_title_sorted = sorted(purchased_items_title, key=lambda p: len(p), reverse=True)
+        purchased_items_mask = torch.LongTensor(purchased_items_mask).to(device)
+
+        d = {}
+        for i, ci in enumerate(purchased_items_title):
+            for j, cj in enumerate(purchased_items_title_sorted):
+                if ci == cj and not j in d and not i in d.values():
+                    d[j] = i
+                    continue
+        title_length = [len(c) for c in purchased_items_title_sorted]
+        title_maxl = max(title_length)
+        title_mask = np.zeros((len(purchased_items_title_sorted), title_maxl), dtype='int')
+        for i, c in enumerate(purchased_items_title_sorted):
+            title_mask[i, :title_length[i]] = c
+        title_mask = torch.LongTensor(title_mask).to(device)
+
+        purchased_items_title_onehot = np.zeros((len(purchased_items_title), len(vocab2index)))
+        for i, c in enumerate(purchased_items_title):
+            purchased_items_title_onehot[i, c] = 1
+        purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
+
+        # anneal
         if total_anneal_steps > 0:
             anneal = min(args.anneal_cap, 
                             1. * update_count / total_anneal_steps)
         else:
             anneal = args.anneal_cap
 
+        # train model
         optimizer.zero_grad()
-        recon_batch, mu, logvar = model(data)
-        
-        loss = criterion(recon_batch, data, mu, logvar, anneal)
+        recon_batch, mu, logvar = model(data_tensor, purchased_items_mask, title_mask, title_length, d)
+
+        loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -156,14 +213,48 @@ def evaluate(data_tr, data_te):
     n100_list = []
     r20_list = []
     r50_list = []
-    
+
+    recon_input = []
     with torch.no_grad():
         for start_idx in range(0, e_N, args.batch_size):
             end_idx = min(start_idx + args.batch_size, N)
             data = data_tr[e_idxlist[start_idx:end_idx]]
             heldout_data = data_te[e_idxlist[start_idx:end_idx]]
-
+            # print(heldout_data.sum(axis=1))
             data_tensor = naive_sparse2tensor(data).to(device)
+
+            # title
+            purchased_items = list(data.nonzero()[1])
+            purchased_items_mask = np.zeros(max_item)
+            purchased_items_mask[:len(purchased_items)] = purchased_items
+
+            purchased_items_title = []
+            for idx, item in enumerate(list(purchased_items_mask)):
+                if np.sum(item) == 0 and idx >= len(purchased_items):
+                    purchased_items_title.append([0])
+                else:
+                    purchased_items_title.append(item_title[int(item)]['words'])
+
+            purchased_items_title_sorted = sorted(purchased_items_title, key=lambda p: len(p), reverse=True)
+            purchased_items_mask = torch.LongTensor(purchased_items_mask).to(device)
+
+            d = {}
+            for i, ci in enumerate(purchased_items_title):
+                for j, cj in enumerate(purchased_items_title_sorted):
+                    if ci == cj and not j in d and not i in d.values():
+                        d[j] = i
+                        continue
+            title_length = [len(c) for c in purchased_items_title_sorted]
+            title_maxl = max(title_length)
+            title_mask = np.zeros((len(purchased_items_title_sorted), title_maxl), dtype='int')
+            for i, c in enumerate(purchased_items_title_sorted):
+                title_mask[i, :title_length[i]] = c
+            title_mask = torch.LongTensor(title_mask).to(device)
+
+            purchased_items_title_onehot = np.zeros((len(purchased_items_title), len(vocab2index)))
+            for i, c in enumerate(purchased_items_title):
+                purchased_items_title_onehot[i, c] = 1
+            purchased_items_title_onehot = torch.FloatTensor(purchased_items_title_onehot).to(device)
 
             if total_anneal_steps > 0:
                 anneal = min(args.anneal_cap, 
@@ -171,7 +262,8 @@ def evaluate(data_tr, data_te):
             else:
                 anneal = args.anneal_cap
 
-            recon_batch, mu, logvar = model(data_tensor)
+            # recon_batch, mu, logvar = model(data_tensor)
+            recon_batch, mu, logvar = model(data_tensor, purchased_items_mask, title_mask, title_length, d)
 
             loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
             total_loss += loss.item()
@@ -187,13 +279,15 @@ def evaluate(data_tr, data_te):
             n100_list.append(n100)
             r20_list.append(r20)
             r50_list.append(r50)
+
+            recon_input.append(recon_batch.tolist())
  
     total_loss /= len(range(0, e_N, args.batch_size))
     n100_list = np.concatenate(n100_list)
     r20_list = np.concatenate(r20_list)
     r50_list = np.concatenate(r50_list)
 
-    return total_loss, np.mean(n100_list), np.mean(r20_list), np.mean(r50_list)
+    return total_loss, np.mean(n100_list), np.mean(r20_list), np.mean(r50_list), recon_input
 
 
 best_n100 = -np.inf
@@ -206,7 +300,7 @@ try:
         # train
         train()
         # evaluate
-        val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
+        val_loss, n100, r20, r50, _ = evaluate(vad_data_tr, vad_data_te)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
                 'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
@@ -235,8 +329,12 @@ with open(args.save, 'rb') as f:
     model = torch.load(f)
 
 # Run on test data.
-test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
+test_loss, n100, r20, r50, recon = evaluate(test_data_tr, test_data_te)
 print('=' * 89)
 print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
         'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
 print('=' * 89)
+
+checks = {'recon': recon, 'test_tr': test_data_tr, 'test_te': test_data_te}
+with open('checks.pickle', 'wb') as f:
+    pickle.dump(checks, f, protocol=pickle.HIGHEST_PROTOCOL)

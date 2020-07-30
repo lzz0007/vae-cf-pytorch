@@ -17,7 +17,7 @@ class MultiVAE(nn.Module):
     """
 
     def __init__(self, p_dims, q_dims=None, dropout=0.5, tau=0.1, std=0.075, kfac=7, nogb=False, pre_word_embeds=None,
-                 centers=None, centers_title=None, char_to_ix=None, vocab_size=None):
+                 char_to_ix=None, vocab_size=None):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
         if q_dims: # 13015x100x100
@@ -43,9 +43,9 @@ class MultiVAE(nn.Module):
         self.kfac = kfac
         num_items = self.q_dims[0]
         self.cores = nn.Parameter(torch.empty(self.kfac, dfac))
-        self.cores.data = centers
+        # self.cores.data = centers
         self.items = nn.Parameter(torch.empty(num_items, dfac))
-        # nn.init.xavier_normal_(self.cores.data)
+        nn.init.xavier_normal_(self.cores.data)
         nn.init.xavier_normal_(self.items.data)
         self.tau = tau
         self.std = std  # Standard deviation of the Gaussian prior
@@ -98,7 +98,6 @@ class MultiVAE(nn.Module):
         self.experts = ProductOfExperts()
 
     def forward(self, input, purchased_items, title_mask, title_length, d):  # data_title: 100x102x100
-        batch_size = input.shape[0]
 
         # clustering
         # cores = F.normalize(self.cores)  # 7*100
