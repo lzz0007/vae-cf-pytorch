@@ -10,17 +10,18 @@ from scipy import sparse
 import models
 import data
 import metric
+import copy
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
-parser.add_argument('--data', type=str, default='ml-1m',
+parser.add_argument('--data', type=str, default='data/amazon',
                     help='Movielens-20m dataset location')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
 parser.add_argument('--wd', type=float, default=0.001,
                     help='weight decay coefficient')
-parser.add_argument('--batch_size', type=int, default=500,
+parser.add_argument('--batch_size', type=int, default=1,
                     help='batch size')
-parser.add_argument('--epochs', type=int, default=500,
+parser.add_argument('--epochs', type=int, default=100,
                     help='upper epoch limit')
 parser.add_argument('--total_anneal_steps', type=int, default=200000,
                     help='the total number of gradient updates for annealing')
@@ -30,7 +31,7 @@ parser.add_argument('--seed', type=int, default=98765,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=500, metavar='N',
+parser.add_argument('--log-interval', type=int, default=1000, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
@@ -153,7 +154,8 @@ def evaluate(data_tr, data_te):
     global update_count
     e_idxlist = list(range(data_tr.shape[0]))
     e_N = data_tr.shape[0]
-    n100_list = []
+    n20_list = []
+    n50_list = []
     r20_list = []
     r50_list = []
     
@@ -180,23 +182,26 @@ def evaluate(data_tr, data_te):
             recon_batch = recon_batch.cpu().numpy()
             recon_batch[data.nonzero()] = -np.inf
 
-            n100 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 100)
+            n20 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 20)
+            n50 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 50)
             r20 = metric.Recall_at_k_batch(recon_batch, heldout_data, 20)
             r50 = metric.Recall_at_k_batch(recon_batch, heldout_data, 50)
 
-            n100_list.append(n100)
+            n20_list.append(n20)
+            n50_list.append(n50)
             r20_list.append(r20)
             r50_list.append(r50)
  
     total_loss /= len(range(0, e_N, args.batch_size))
-    n100_list = np.concatenate(n100_list)
+    n20_list = np.concatenate(n20_list)
+    n50_list = np.concatenate(n50_list)
     r20_list = np.concatenate(r20_list)
     r50_list = np.concatenate(r50_list)
 
-    return total_loss, np.mean(n100_list), np.mean(r20_list), np.mean(r50_list)
+    return total_loss, np.mean(n20_list), np.mean(n50_list), np.mean(r20_list), np.mean(r50_list)
 
 
-best_n100 = -np.inf
+best_n50 = -np.inf
 update_count = 0
 
 # At any point you can hit Ctrl + C to break out of training early.
@@ -206,37 +211,39 @@ try:
         # train
         train()
         # evaluate
-        val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
+        val_loss, n20, n50, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
-                'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
+                'n20 {:5.3f} | n50 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
                     epoch, time.time() - epoch_start_time, val_loss,
-                    n100, r20, r50))
+                    n20, n50, r20, r50))
         print('-' * 89)
 
         n_iter = epoch * len(range(0, N, args.batch_size))
         writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)
-        writer.add_scalar('data/n100', n100, n_iter)
+        writer.add_scalar('data/n20', n20, n_iter)
+        writer.add_scalar('data/n50', n50, n_iter)
         writer.add_scalar('data/r20', r20, n_iter)
         writer.add_scalar('data/r50', r50, n_iter)
 
         # Save the model if the n100 is the best we've seen so far.
-        if n100 > best_n100:
-            with open(args.save, 'wb') as f:
-                torch.save(model, f)
-            best_n100 = n100
+        if n50 > best_n50:
+            # with open(args.save, 'wb') as f:
+            #     torch.save(model, f)
+            best_model = copy.deepcopy(model)
+            best_n50 = n50
 
 except KeyboardInterrupt:
     print('-' * 89)
     print('Exiting from training early')
 
 # Load the best saved model.
-with open(args.save, 'rb') as f:
-    model = torch.load(f)
-
+# with open(args.save, 'rb') as f:
+#     model = torch.load(f)
+model = best_model
 # Run on test data.
-test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
+test_loss, n20, n50, r20, r50 = evaluate(test_data_tr, test_data_te)
 print('=' * 89)
-print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
-        'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
+print('| End of training | test loss {:4.5f} | n20 {:4.5f} | n50 {:4.5f} | r20 {:4.5f} | '
+        'r50 {:4.5f}'.format(test_loss, n20, n50, r20, r50))
 print('=' * 89)

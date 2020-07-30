@@ -85,7 +85,7 @@ class MultiVAE(nn.Module):
     def forward(self, input):
         mu, logvar = self.encode(input)
         z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar, z
+        return self.decode(z), mu, logvar
     
     def encode(self, input):
         h = F.normalize(input)
