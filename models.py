@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 class MultiDAE(nn.Module):
     """
@@ -63,7 +63,7 @@ class MultiVAE(nn.Module):
     https://arxiv.org/abs/1802.05814
     """
 
-    def __init__(self, p_dims, q_dims=None, dropout=0.5, vocab_size=None, tot_items=None):
+    def __init__(self, p_dims, q_dims=None, dropout=0.5, vocab_size=None, tot_items=None, max_item=None):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
         if q_dims:
@@ -83,7 +83,7 @@ class MultiVAE(nn.Module):
         
         # encode title
         self.hidden_dim = 100
-        self.t_dims = [102*300] + self.q_dims[1:]
+        self.t_dims = [max_item*300] + self.q_dims[1:]
         temp_t_dims = [self.t_dims[0]] + [self.q_dims[1]] + [self.q_dims[-1] * 2]
         self.t_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
             d_in, d_out in zip(temp_t_dims[:-1], temp_t_dims[1:])])
@@ -97,12 +97,16 @@ class MultiVAE(nn.Module):
         # lstm encoding for item
         self.word_embeds = nn.Embedding(tot_items, self.hidden_dim)
 
-        # direct concatenate
-        self.hidden_dim = 100
-        self.a_dims = [102*300+tot_items] + self.q_dims[1:]
-        temp_a_dims = [self.a_dims[0]] + [self.q_dims[1]] + [self.q_dims[-1] * 2]
-        self.a_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
-            d_in, d_out in zip(temp_a_dims[:-1], temp_a_dims[1:])])
+        # # direct concatenate
+        # self.a_dims = [max_item*300+tot_items] + self.q_dims[1:]
+        # temp_a_dims = [self.a_dims[0]] + [self.q_dims[1]] + [self.q_dims[-1] * 2]
+        # self.a_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
+        #     d_in, d_out in zip(temp_a_dims[:-1], temp_a_dims[1:])])
+
+        # decode title
+        self.t_d_dims = self.p_dims[:-1] + [vocab_size*80]
+        self.t_d_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
+            d_in, d_out in zip(self.t_d_dims[:-1], self.t_d_dims[1:])])
 
         self.drop = nn.Dropout(dropout)
         self.init_weights()
@@ -128,26 +132,26 @@ class MultiVAE(nn.Module):
         concat_embeds = torch.cat((embeds, chars_embeds), 1)  # itemx300
         concat_embeds = self.drop(concat_embeds)  # itemx300
 
-        # mu_t, logvar_t = self.encode_title(concat_embeds.view(1, -1))
-        #
-        # # seq input
-        # mu_s, logvar_s = self.encode(input)
+        mu_t, logvar_t = self.encode_title(concat_embeds.view(1, -1))
 
-        # # POE
-        # mu = torch.cat((mu_t, mu_s), dim=0)  # 2x100
-        # logvar = torch.cat((logvar_t, logvar_s), dim=0)  # 2x100
-        # mu, logvar = self.experts(mu, logvar)
-        # mu = mu.unsqueeze(0)
-        # logvar = logvar.unsqueeze(0)
+        # seq input
+        mu_s, logvar_s = self.encode(input)
 
-        # direct concatenate
-        combined = torch.cat((input, concat_embeds.view(1, -1)), dim=1)
-        mu, logvar = self.encode_all(combined)
+        # POE
+        mu = torch.cat((mu_t, mu_s), dim=0)  # 2x100
+        logvar = torch.cat((logvar_t, logvar_s), dim=0)  # 2x100
+        mu, logvar = self.experts(mu, logvar)
+        mu = mu.unsqueeze(0)
+        logvar = logvar.unsqueeze(0)
+
+        # # direct concatenate
+        # combined = torch.cat((input, concat_embeds.view(1, -1)), dim=1)
+        # mu, logvar = self.encode_all(combined)
 
         # hidden emb
         z = self.reparameterize(mu, logvar)
 
-        return self.decode(z), mu, logvar
+        return self.decode(z), mu, logvar, self.decode_title(z)
     
     def encode(self, input):
         h = F.normalize(input)
@@ -175,18 +179,18 @@ class MultiVAE(nn.Module):
                 logvar = h[:, self.t_dims[-1]:]
         return mu, logvar
 
-    def encode_all(self, input):
-        h = F.normalize(input)
-        h = self.drop(h)
-
-        for i, layer in enumerate(self.a_layers):
-            h = layer(h)
-            if i != len(self.a_layers) - 1:
-                h = torch.tanh(h)
-            else:  # for last layer
-                mu = h[:, :self.a_dims[-1]]
-                logvar = h[:, self.a_dims[-1]:]
-        return mu, logvar
+    # def encode_all(self, input):
+    #     h = F.normalize(input)
+    #     h = self.drop(h)
+    #
+    #     for i, layer in enumerate(self.a_layers):
+    #         h = layer(h)
+    #         if i != len(self.a_layers) - 1:
+    #             h = torch.tanh(h)
+    #         else:  # for last layer
+    #             mu = h[:, :self.a_dims[-1]]
+    #             logvar = h[:, self.a_dims[-1]:]
+    #     return mu, logvar
 
     def reparameterize(self, mu, logvar):
         if self.training:
@@ -201,6 +205,14 @@ class MultiVAE(nn.Module):
         for i, layer in enumerate(self.p_layers):
             h = layer(h)
             if i != len(self.p_layers) - 1:
+                h = torch.tanh(h)
+        return h
+
+    def decode_title(self, z):
+        h = z
+        for i, layer in enumerate(self.t_d_layers):
+            h = layer(h)
+            if i != len(self.t_d_layers) - 1:
                 h = torch.tanh(h)
         return h
 
@@ -238,16 +250,16 @@ class MultiVAE(nn.Module):
             # Normal Initialization for Biases
             layer.bias.data.normal_(0.0, 0.001)
 
-        for layer in self.a_layers:
-            # Xavier Initialization for weights
-            size = layer.weight.size()
-            fan_out = size[0]
-            fan_in = size[1]
-            std = np.sqrt(2.0/(fan_in + fan_out))
-            layer.weight.data.normal_(0.0, std)
-
-            # Normal Initialization for Biases
-            layer.bias.data.normal_(0.0, 0.001)
+        # for layer in self.a_layers:
+        #     # Xavier Initialization for weights
+        #     size = layer.weight.size()
+        #     fan_out = size[0]
+        #     fan_in = size[1]
+        #     std = np.sqrt(2.0/(fan_in + fan_out))
+        #     layer.weight.data.normal_(0.0, std)
+        #
+        #     # Normal Initialization for Biases
+        #     layer.bias.data.normal_(0.0, 0.001)
 
     def init_embedding(self, input_embedding):
         """
@@ -331,6 +343,37 @@ def loss_function(recon_x, x, mu, logvar, anneal=1.0):
     KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
 
     return BCE + anneal * KLD
+
+
+def loss_function_title(recon_x, x, mu, logvar, recon_t, t, anneal=1.0):
+    # BCE = F.binary_cross_entropy(recon_x, x)
+    bce, t_bce = 0, 0
+    if recon_x is not None and x is not None:
+        bce = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
+    if recon_t is not None and t is not None:
+        t_bce =  -torch.mean(torch.sum(F.log_softmax(recon_t.view(80, -1), 1) * t, -1))
+    KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
+    return bce + anneal * KLD + t_bce
+
+
+# def loss_function(x, std_list, recon_x, anneal, title, recon_title):
+#     # BCE = F.binary_cross_entropy(recon_x, x)
+#     # BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
+#     # KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
+#     recon_loss = torch.mean(torch.sum(-F.log_softmax(recon_x, 1) * x, -1))
+#     kl = None
+#     for i in range(len(std_list)):
+#         lnvarq_sub_lnvar0 = std_list[i]
+#         kl_k = torch.mean(torch.sum(0.5 * (-lnvarq_sub_lnvar0 + torch.exp(lnvarq_sub_lnvar0) - 1.), dim=1))
+#         kl = (kl_k if (kl is None) else (kl + kl_k))
+#     # neg_elbo = recon_loss + anneal * kl
+#     recon_loss_title = 0
+#     if recon_title is not None:
+#         # recon_loss_title = torch.sum(cross_entropy(recon_title, title), dim=1)
+#         recon_loss_title = torch.mean(torch.sum(-F.log_softmax(recon_title.view(recon_title.shape[0], -1), 1) *
+#                                                 title.view(title.shape[0], -1), -1))
+#
+#     return recon_loss + anneal * kl + 0.1*recon_loss_title
 
 
 class ProductOfExperts(nn.Module):

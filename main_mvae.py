@@ -8,7 +8,7 @@ import numpy as np
 from tensorboardX import SummaryWriter
 from scipy import sparse
 import models_mvae
-import data
+import dataloader
 import metric
 
 import torch.nn.functional as F
@@ -85,7 +85,7 @@ logger = logging.getLogger()
 # Load data
 ###############################################################################
 # args.data = 'alishop-7c'
-loader = data.DataLoader(args.data)
+loader = dataloader.DataLoader(args.data)
 
 n_items = loader.load_n_items()
 train_data, train_buy = loader.load_data('train')

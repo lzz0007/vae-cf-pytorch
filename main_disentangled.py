@@ -8,7 +8,7 @@ import numpy as np
 from tensorboardX import SummaryWriter
 from scipy import sparse
 import models_dis
-import data
+import dataloader
 import metric
 
 import torch.nn.functional as F
@@ -69,12 +69,12 @@ logger = logging.getLogger()
 # Load data
 ###############################################################################
 # args.data = 'alishop-7c'
-loader = data.DataLoader(args.data)
+loader = dataloader.DataLoader(args.data)
 
 n_items = loader.load_n_items()
-train_data, _ = loader.load_data('train')
-vad_data_tr, vad_data_te, _ = loader.load_data('validation')
-test_data_tr, test_data_te, _ = loader.load_data('test')
+train_data = loader.load_data('train')
+vad_data_tr, vad_data_te = loader.load_data('validation')
+# test_data_tr, test_data_te, _ = loader.load_data('test')
 
 N = train_data.shape[0]
 idxlist = list(range(N))
@@ -291,7 +291,11 @@ def evaluate(data_tr, data_te):
            np.mean(r60_list), np.mean(r70_list), np.mean(r80_list), np.mean(r90_list), np.mean(r100_list),
 
 
-best_n100 = -np.inf
+best_n20 = -np.inf
+best_n50 = -np.inf
+best_r20 = -np.inf
+best_r50 = -np.inf
+best_val = -np.inf
 update_count = 0
 
 # At any point you can hit Ctrl + C to break out of training early.
@@ -307,45 +311,56 @@ try:
 
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
-              'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
-                epoch, time.time() - epoch_start_time, val_loss,
-                n100, r20, r50))
+                'n20 {:5.3f} | n50 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
+                    epoch, time.time() - epoch_start_time, val_loss,
+                    n20, n50, r20, r50))
         print('-' * 89)
 
         n_iter = epoch * len(range(0, N, args.batch_size))
         writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)
-        writer.add_scalar('data/n100', n100, n_iter)
+        writer.add_scalar('data/n20', n20, n_iter)
+        writer.add_scalar('data/n50', n50, n_iter)
         writer.add_scalar('data/r20', r20, n_iter)
         writer.add_scalar('data/r50', r50, n_iter)
 
         # Save the model if the n100 is the best we've seen so far.
-        if n100 > best_n100:
-            with open(args.save, 'wb') as f:
-                torch.save(model, f)
-            best_n100 = n100
+        if r50 > best_r50:
+            # with open(args.save, 'wb') as f:
+            #     torch.save(model, f)
+            # best_model = copy.deepcopy(model)
+            best_n20 = n20
+            best_n50 = n50
+            best_r20 = r20
+            best_r50 = r50
+            best_val = val_loss
 
 except KeyboardInterrupt:
     print('-' * 89)
     print('Exiting from training early')
 
-# Load the best saved model.
-with open(args.save, 'rb') as f:
-    model = torch.load(f)
-
-# Run on test data.
-# test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
-test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, r10, r20, r30, r40, \
-r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te)
+# # Load the best saved model.
+# with open(args.save, 'rb') as f:
+#     model = torch.load(f)
+#
+# # Run on test data.
+# # test_loss, n100, r20, r50 = evaluate(test_data_tr, test_data_te)
+# test_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, r10, r20, r30, r40, \
+# r50, r60, r70, r80, r90, r100 = evaluate(test_data_tr, test_data_te)
+#
+# print('=' * 89)
+# print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
+#       'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
+# print('=' * 89)
+# logger.info('|script: {}|kfac: {}|epochs: {:3d}|lr: {:5.5f}'.format('main_disentangled.py', args.kfac, args.epochs, args.lr))
+# logger.info('|{:4.2f}| '
+#             '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}| '
+#             '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'
+#             '|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'.format(
+#     test_loss,
+#     n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
+#     r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
 
 print('=' * 89)
-print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
-      'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
+print('| End of training | val loss {:4.5f} | n20 {:4.5f} | n50 {:4.5f} | r20 {:4.5f} | '
+        'r50 {:4.5f}'.format(best_val, best_n20, best_n50, best_r20, best_r50))
 print('=' * 89)
-logger.info('|script: {}|kfac: {}|epochs: {:3d}|lr: {:5.5f}'.format('main_disentangled.py', args.kfac, args.epochs, args.lr))
-logger.info('|{:4.2f}| '
-            '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}| '
-            '{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'
-            '|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}|{:5.5f}'.format(
-    test_loss,
-    n10, n20, n30, n40, n50, n60, n70, n80, n90, n100,
-    r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))

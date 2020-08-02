@@ -8,7 +8,7 @@ import numpy as np
 from tensorboardX import SummaryWriter
 from scipy import sparse
 import models
-import data
+import dataloader
 import metric
 import os
 import pickle
@@ -46,18 +46,18 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 ###############################################################################
 # Load data
 ###############################################################################
 # args.data = 'ml-latest-small'
-loader = data.DataLoader(args.data)
+loader = dataloader.DataLoader(args.data)
 
 n_items = loader.load_n_items()
 train_data = loader.load_data('train')
 vad_data_tr, vad_data_te = loader.load_data('validation')
-test_data_tr, test_data_te = loader.load_data('test')
+# test_data_tr, test_data_te = loader.load_data('test')
 
 N = train_data.shape[0]
 idxlist = list(range(N))
@@ -72,9 +72,7 @@ with open(os.path.join(args.data, 'meta_encoded.pickle'), 'rb') as f:
 
 item_mat = dataset['meta_mat']
 vocab2index = dataset['vocab2index']
-cat2index = dataset['cat2index']
 item2index = dataset['item2index']
-category_id = np.array(dataset['category_id'])
 item_title = dataset['meta_titles']
 
 max_item = int(max(train_data.sum(axis=1)))
@@ -85,10 +83,11 @@ max_word = max([len(i['words']) for i in item_title])
 ###############################################################################
 
 p_dims = [100, 100, n_items]
-model = models.MultiVAE(p_dims, q_dims=None, dropout=0.5, vocab_size=len(vocab2index), tot_items=len(item2index)).to(device)
+model = models.MultiVAE(p_dims, q_dims=None, dropout=0.5, vocab_size=len(vocab2index), tot_items=len(item2index),
+                        max_item=max_item).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.wd)
-criterion = models.loss_function
+criterion = models.loss_function_title
 
 ###############################################################################
 # Training code
@@ -120,7 +119,14 @@ def naive_sparse2tensor(data):
     return torch.FloatTensor(data.toarray())
 
 
+def set_rng_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
 def train():
+    set_rng_seed(args.seed)
+
     # Turn on training mode
     model.train()
     train_loss = 0.0
@@ -178,9 +184,10 @@ def train():
 
         # train model
         optimizer.zero_grad()
-        recon_batch, mu, logvar = model(data_tensor, purchased_items_mask, title_mask, title_length, d)
+        recon_batch, mu, logvar, recon_title = model(data_tensor, purchased_items_mask, title_mask, title_length, d)
 
-        loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
+        # loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
+        loss = criterion(recon_batch, data_tensor, mu, logvar, recon_title, purchased_items_title_onehot, anneal)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -204,13 +211,16 @@ def train():
 
 
 def evaluate(data_tr, data_te):
+    set_rng_seed(args.seed)
+
     # Turn on evaluation mode
     model.eval()
     total_loss = 0.0
     global update_count
     e_idxlist = list(range(data_tr.shape[0]))
     e_N = data_tr.shape[0]
-    n100_list = []
+    n20_list = []
+    n50_list = []
     r20_list = []
     r50_list = []
 
@@ -263,34 +273,43 @@ def evaluate(data_tr, data_te):
                 anneal = args.anneal_cap
 
             # recon_batch, mu, logvar = model(data_tensor)
-            recon_batch, mu, logvar = model(data_tensor, purchased_items_mask, title_mask, title_length, d)
+            recon_batch, mu, logvar, recon_title = model(data_tensor, purchased_items_mask, title_mask, title_length, d)
 
-            loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
+            # loss = criterion(recon_batch, data_tensor, mu, logvar, anneal)
+            loss = criterion(recon_batch, data_tensor, mu, logvar, recon_title, purchased_items_title_onehot, anneal)
             total_loss += loss.item()
 
             # Exclude examples from training set
             recon_batch = recon_batch.cpu().numpy()
             recon_batch[data.nonzero()] = -np.inf
 
-            n100 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 100)
+            n20 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 20)
+            n50 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 50)
             r20 = metric.Recall_at_k_batch(recon_batch, heldout_data, 20)
             r50 = metric.Recall_at_k_batch(recon_batch, heldout_data, 50)
 
-            n100_list.append(n100)
+            n20_list.append(n20)
+            n50_list.append(n50)
             r20_list.append(r20)
             r50_list.append(r50)
 
             recon_input.append(recon_batch.tolist())
  
     total_loss /= len(range(0, e_N, args.batch_size))
-    n100_list = np.concatenate(n100_list)
+    n20_list = np.concatenate(n20_list)
+    n50_list = np.concatenate(n50_list)
     r20_list = np.concatenate(r20_list)
     r50_list = np.concatenate(r50_list)
 
-    return total_loss, np.mean(n100_list), np.mean(r20_list), np.mean(r50_list), recon_input
+    return total_loss, np.mean(n20_list), np.mean(n50_list), np.mean(r20_list), np.mean(r50_list)
 
 
-best_n100 = -np.inf
+best_n20 = -np.inf
+best_n50 = -np.inf
+best_r20 = -np.inf
+best_r50 = -np.inf
+best_val = -np.inf
+
 update_count = 0
 
 # At any point you can hit Ctrl + C to break out of training early.
@@ -300,41 +319,52 @@ try:
         # train
         train()
         # evaluate
-        val_loss, n100, r20, r50, _ = evaluate(vad_data_tr, vad_data_te)
+        val_loss, n20, n50, r20, r50 = evaluate(vad_data_tr, vad_data_te)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
-                'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
+                'n20 {:5.3f} | n50 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
                     epoch, time.time() - epoch_start_time, val_loss,
-                    n100, r20, r50))
+                    n20, n50, r20, r50))
         print('-' * 89)
 
         n_iter = epoch * len(range(0, N, args.batch_size))
         writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)
-        writer.add_scalar('data/n100', n100, n_iter)
+        writer.add_scalar('data/n20', n20, n_iter)
+        writer.add_scalar('data/n50', n50, n_iter)
         writer.add_scalar('data/r20', r20, n_iter)
         writer.add_scalar('data/r50', r50, n_iter)
 
         # Save the model if the n100 is the best we've seen so far.
-        if n100 > best_n100:
-            with open(args.save, 'wb') as f:
-                torch.save(model, f)
-            best_n100 = n100
+        if r50 > best_r50:
+            # with open(args.save, 'wb') as f:
+            #     torch.save(model, f)
+            # best_model = copy.deepcopy(model)
+            best_n20 = n20
+            best_n50 = n50
+            best_r20 = r20
+            best_r50 = r50
+            best_val = val_loss
 
 except KeyboardInterrupt:
     print('-' * 89)
     print('Exiting from training early')
 
-# Load the best saved model.
-with open(args.save, 'rb') as f:
-    model = torch.load(f)
+# # Load the best saved model.
+# with open(args.save, 'rb') as f:
+#     model = torch.load(f)
 
-# Run on test data.
-test_loss, n100, r20, r50, recon = evaluate(test_data_tr, test_data_te)
-print('=' * 89)
-print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
-        'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
-print('=' * 89)
+# # Run on test data.
+# test_loss, n100, r20, r50, recon = evaluate(test_data_tr, test_data_te)
+# print('=' * 89)
+# print('| End of training | test loss {:4.5f} | n100 {:4.5f} | r20 {:4.5f} | '
+#         'r50 {:4.5f}'.format(test_loss, n100, r20, r50))
+# print('=' * 89)
+#
+# checks = {'recon': recon, 'test_tr': test_data_tr, 'test_te': test_data_te}
+# with open('checks.pickle', 'wb') as f:
+#     pickle.dump(checks, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-checks = {'recon': recon, 'test_tr': test_data_tr, 'test_te': test_data_te}
-with open('checks.pickle', 'wb') as f:
-    pickle.dump(checks, f, protocol=pickle.HIGHEST_PROTOCOL)
+print('=' * 89)
+print('| End of training | val loss {:4.5f} | n20 {:4.5f} | n50 {:4.5f} | r20 {:4.5f} | '
+        'r50 {:4.5f}'.format(best_val, best_n20, best_n50, best_r20, best_r50))
+print('=' * 89)
