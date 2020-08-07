@@ -13,7 +13,7 @@ class MultiVAE(nn.Module):
     https://arxiv.org/abs/1802.05814
     """
 
-    def __init__(self, p_dims, q_dims=None, dropout=0.5, vocab_size=None, tot_items=None, max_item=None):
+    def __init__(self, vocab_size, p_dims, q_dims=None, dropout=0.5):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
         if q_dims:
@@ -196,12 +196,12 @@ class MultiVAE(nn.Module):
             layer.bias.data.normal_(0.0, 0.001)
 
 
-def loss_function(recon_x, x, mu, logvar, anneal=1.0):
-    # BCE = F.binary_cross_entropy(recon_x, x)
-    BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
-    KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
-
-    return BCE + anneal * KLD
+# def loss_function(recon_x, x, mu, logvar, anneal=1.0):
+#     # BCE = F.binary_cross_entropy(recon_x, x)
+#     BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
+#     KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
+#
+#     return BCE + anneal * KLD
 
 
 def loss_function_title(recon_x, x, mu, logvar, recon_t, t, anneal=1.0):
@@ -213,6 +213,22 @@ def loss_function_title(recon_x, x, mu, logvar, recon_t, t, anneal=1.0):
         t_bce = -torch.mean(torch.sum(F.log_softmax(recon_t, 1) * t, -1))
     KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     return bce + anneal * KLD + t_bce
+
+
+def loss_function(recon_x, x, mu, logvar, recon_t, t, anneal=1.0):
+    # BCE = F.binary_cross_entropy(recon_x, x)
+    # BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
+    # KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
+    bce, t_bce, kl = 0, 0, 0
+    if recon_x is not None and x is not None:
+        bce = torch.mean(torch.sum(-F.log_softmax(recon_x, 1) * x, -1))
+        kl = torch.mean(torch.sum(0.5 * (-logvar + torch.exp(logvar) - 1.), dim=1))
+    if recon_t is not None and t is not None:
+        t_bce = -torch.mean(torch.sum(F.log_softmax(recon_t, 1) * t, -1))
+    if recon_x is None and x is None:
+        kl = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
+
+    return bce + anneal * kl + t_bce
 
 
 class ProductOfExperts(nn.Module):
