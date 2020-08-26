@@ -57,6 +57,40 @@ def split_train_test_proportion(data, test_prop=0.2):
     return data_tr, data_te
 
 
+def split_train_val_test_proportion(data, test_prop=0.2):
+    data_grouped_by_user = data.groupby('userId')
+    tr_list, val_list, te_list = list(), list(), list()
+
+    np.random.seed(12345)
+
+    for _, group in data_grouped_by_user:
+        n_items_u = len(group)
+
+        if n_items_u >= 5:
+            idx = np.zeros(n_items_u, dtype='bool')
+            idx_val = np.zeros(n_items_u, dtype='bool')
+            idx_tst = np.zeros(n_items_u, dtype='bool')
+
+            idx_list = np.random.choice(n_items_u, size=int(test_prop * n_items_u), replace=False).astype('int64')
+
+            idx[idx_list] = True
+            idx_val[idx_list[:int(len(idx_list)/2)]] = True
+            idx_tst[idx_list[int(len(idx_list)/2):]] = True
+
+            tr_list.append(group[np.logical_not(idx)])
+            val_list.append(group[idx_val])
+            te_list.append(group[idx_tst])
+
+        else:
+            tr_list.append(group)
+
+    data_tr = pd.concat(tr_list)
+    data_val = pd.concat(val_list)
+    data_te = pd.concat(te_list)
+
+    return data_tr, data_val, data_te
+
+
 def numerize(tp, profile2id, show2id):
     uid = tp['userId'].apply(lambda x: profile2id[x])
     sid = tp['movieId'].apply(lambda x: show2id[x])
@@ -173,10 +207,9 @@ if __name__ == '__main__':
     which_dataset_to_use = 4  # in {0, 1, 2, 3}, see below.
     dataset = {0: 'ml-latest-small', 1: 'ml-1m', 2: 'ml-20m', 3: 'netflix', 4: 'amazon'}
 
-    n_heldout_users = (50, 500, 10000, 40000, 900)[which_dataset_to_use]
+    # n_heldout_users = (50, 500, 10000, 40000, 900)[which_dataset_to_use]
     DATA_DIR = 'data/%s/' % dataset[which_dataset_to_use]
     print("Load and Preprocess %s dataset" % dataset[which_dataset_to_use])
-
 
     # Load Data
     if 'ml-1m' in DATA_DIR:
@@ -184,7 +217,7 @@ if __name__ == '__main__':
                                header=None, delimiter='::',
                                names=['userId', 'movieId', 'rating', 'timestamp'])
     elif 'amazon' in DATA_DIR:
-        raw_data = pd.read_csv(os.path.join(DATA_DIR, 'Luxury_Beauty.csv'), header=None,
+        raw_data = pd.read_csv(os.path.join(DATA_DIR, 'Video_Games.csv'), header=None,
                              names=['movieId', 'userId', 'rating', 'timestamp'])
     else:
         raw_data = pd.read_csv(os.path.join(DATA_DIR, 'ratings.csv'), header=0)
@@ -192,7 +225,7 @@ if __name__ == '__main__':
     raw_data = raw_data[raw_data['rating'] > 3.5]
 
     # Load title data
-    meta = getDF(os.path.join(DATA_DIR, 'meta_Luxury_Beauty.json.gz'))
+    meta = getDF(os.path.join(DATA_DIR, 'meta_Video_Games.json.gz'))
     meta = meta.drop_duplicates(subset='asin', keep='first')
     # find null title
     meta = meta[meta['title'].notnull()]
@@ -216,9 +249,11 @@ if __name__ == '__main__':
     # tr_users = unique_uid[:(n_users - n_heldout_users * 2)]
     # vd_users = unique_uid[(n_users - n_heldout_users * 2): (n_users - n_heldout_users)]
     # te_users = unique_uid[(n_users - n_heldout_users):]
-
-    vad_plays_tr, vad_plays_te = split_train_test_proportion(raw_data)
-
+    test_data_flag = False
+    if test_data_flag:
+        vad_plays_tr, vad_plays_vad, vad_plays_te = split_train_val_test_proportion(raw_data, 0.4)
+    else:
+        vad_plays_tr, vad_plays_vad = split_train_test_proportion(raw_data)
     # train_plays = raw_data.loc[raw_data['userId'].isin(unique_uid)]
     unique_sid = pd.unique(vad_plays_tr['movieId'])
 
@@ -251,23 +286,38 @@ if __name__ == '__main__':
     train_data = numerize(vad_plays_tr, profile2id, show2id)
     train_data.to_csv(os.path.join(pro_dir, 'train.csv'), index=False)
 
+    # validation
     vad_data_tr = numerize(vad_plays_tr, profile2id, show2id)
     vad_data_tr.to_csv(os.path.join(pro_dir, 'validation_tr.csv'), index=False)
 
-    vad_plays_te = vad_plays_te[vad_plays_te['movieId'].isin(unique_sid)]
-    vad_data_te = numerize(vad_plays_te, profile2id, show2id)
+    vad_plays_vad = vad_plays_vad[vad_plays_vad['movieId'].isin(unique_sid)]
+    vad_data_te = numerize(vad_plays_vad, profile2id, show2id)
     vad_data_te.to_csv(os.path.join(pro_dir, 'validation_te.csv'), index=False)
 
-    # test_data_tr = numerize(test_plays_tr, profile2id, show2id)
-    # test_data_tr.to_csv(os.path.join(pro_dir, 'test_tr.csv'), index=False)
+    # test
+    if test_data_flag:
+        test_data_tr = numerize(vad_plays_tr, profile2id, show2id)
+        test_data_tr.to_csv(os.path.join(pro_dir, 'test_tr.csv'), index=False)
 
-    # test_data_te = numerize(test_plays_te, profile2id, show2id)
-    # test_data_te.to_csv(os.path.join(pro_dir, 'test_te.csv'), index=False)
-
-    print('total no of users:', len(unique_uid))
-    print('total no of items:', len(unique_sid))
-    print('total no of interactions for train:', train_data.shape[0])
-    print('sparsity:',  train_data.shape[0]/(len(unique_uid)*len(unique_sid)))
+        vad_plays_te = vad_plays_te[vad_plays_te['movieId'].isin(unique_sid)]
+        test_data_te = numerize(vad_plays_te, profile2id, show2id)
+        test_data_te.to_csv(os.path.join(pro_dir, 'test_te.csv'), index=False)
+        print('test data:', test_data_flag)
+        print('total no of users:', len(unique_uid))
+        print('total no of items:', len(unique_sid))
+        print('total no of interactions:', (train_data.shape[0]+vad_data_te.shape[0]+test_data_te.shape[0]))
+        print('total no of interactions for train:', train_data.shape[0])
+        print('total no of interactions for valid:', vad_data_te.shape[0])
+        print('total no of interactions for test:', test_data_te.shape[0])
+        print('sparsity:',  (train_data.shape[0]+vad_data_te.shape[0]+test_data_te.shape[0])/(len(unique_uid)*len(unique_sid)))
+    else:
+        print('test data:', test_data_flag)
+        print('total no of users:', len(unique_uid))
+        print('total no of items:', len(unique_sid))
+        print('total no of interactions:', (train_data.shape[0]+vad_data_te.shape[0]))
+        print('total no of interactions for train:', train_data.shape[0])
+        print('total no of interactions for valid:', vad_data_te.shape[0])
+        print('sparsity:',  (train_data.shape[0]+vad_data_te.shape[0])/(len(unique_uid)*len(unique_sid)))
 
     # process title data
     meta = meta[meta['asin'].isin(unique_sid)]

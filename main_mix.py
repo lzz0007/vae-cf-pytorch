@@ -53,10 +53,12 @@ args = parser.parse_args()
 # parameters = {'lr': [0.001, 0.01, 0.1], 'wd': [0.001, 0.01, 0.1], 'batch_size': [100, 500, 1000],
 #               'dfac1': [100, 400, 800], 'dfac2': [100, 400, 800], 'drop': [0, 0.4, 0.6, 0.8],
 #               'std': [0.025, 0.075, 0.1]}
-parameters = {'lr': [0.1], 'wd': [0.01, 0.1], 'batch_size': [100],
-              'dfac1': [100], 'dfac2': [100], 'drop': [0.5], 'std': [0.075]}
-# parameters = {'lr': [0.001], 'wd': [0.001], 'batch_size': [100],
-#               'dfac1': [100], 'dfac2': [100], 'drop': [0.5]}
+# mlp
+# parameters = {'lr': [0.1], 'wd': [0.001], 'batch_size': [300],
+#               'dfac1': [100], 'dfac2': [400, 800], 'drop': [0.5], 'std': [0.075]}
+# nips
+parameters = {'lr': [0.001], 'wd': [0.001], 'batch_size': [1000],
+              'dfac1': [400, 800], 'dfac2': [800], 'drop': [0.5], 'std': [0.025, 0.075]}
 
 # Set the random seed manually for reproductibility.
 torch.manual_seed(args.seed)
@@ -64,7 +66,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(filename=args.save, filemode='a', format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S', level=logging.DEBUG)
@@ -158,7 +160,7 @@ def train():
         joint_loss = criterion(recon_batch_1, data_tensor, mu_1, logvar_1, recon_title_1, title_tensor, anneal)
         seq_loss = criterion(recon_batch_2, data_tensor, mu_2, logvar_2, recon_title_2, title_tensor, anneal)
         title_loss = criterion(recon_batch_3, data_tensor, mu_3, logvar_3, recon_title_3, title_tensor, anneal)
-        loss = joint_loss + seq_loss + title_loss
+        loss = 0.3*joint_loss + 0.6*seq_loss + 0.1*title_loss
 
         loss.backward()
         train_loss += loss.item()
@@ -240,12 +242,12 @@ def evaluate(data_tr, data_te):
             joint_loss = criterion(recon_batch_1, data_tensor, mu_1, logvar_1, recon_title_1, title_tensor, anneal)
             seq_loss = criterion(recon_batch_2, data_tensor, mu_2, logvar_2, recon_title_2, title_tensor, anneal)
             title_loss = criterion(recon_batch_3, data_tensor, mu_3, logvar_3, recon_title_3, title_tensor, anneal)
-            loss = title_loss + joint_loss + seq_loss
+            loss = 0.3*joint_loss + 0.6*seq_loss + 0.1*title_loss
 
             total_loss += loss.item()
 
             # Exclude examples from training set
-            recon_batch = (recon_batch_3 + recon_batch_1 + recon_batch_2)/3
+            recon_batch = (0.1*recon_batch_3 + 0.3*recon_batch_1 + 0.6*recon_batch_2)
             recon_batch = recon_batch.cpu().numpy()
             recon_batch[data.nonzero()] = -np.inf
 
@@ -420,8 +422,8 @@ if __name__ == '__main__':
                                       'drop: {:4.2f}|std: {:4.5f}|epoch: {:4.5f}'.
                                       format(best_params['lr'], best_params['wd'], best_params['batch_size'],
                                              best_params['dfac1'], best_params['dfac2'], best_params['drop'],
-                                             best_params['std'], best_params['epoch']))
-                                # # print('=' * 89)
+                                             best_params['std'], best_params['epochs']))
+                                # print('=' * 89)
                                 # # Run on test data.
                                 # test_loss, n5, n10, n20, n50, r5, r10, r20, r50 = evaluate(vad_data_tr, vad_data_te)
                                 # # print('=' * 89)
@@ -442,8 +444,10 @@ if __name__ == '__main__':
                                     'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(best_val, best_n5, best_n10, best_n20,
                                                                                  best_n50, best_r5, best_r10, best_r20,
                                                                                  best_r50))
+                                print('=' * 89)
                                 logger.info(
                                     '|End of training|test loss {:4.5f}|n5 {:4.5f}|n10 {:4.5f}|n20 {:4.5f}|n50 {:4.5f}|r5 {:4.5f}|'
                                     'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(best_val, best_n5, best_n10, best_n20,
                                                                                  best_n50, best_r5, best_r10, best_r20,
                                                                                  best_r50))
+                                logger.info('=' * 89)

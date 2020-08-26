@@ -43,7 +43,7 @@ parser.add_argument('--tau', type=float, default=0.1,
                     help='Temperature of sigmoid/softmax, in (0,oo).')
 parser.add_argument('--std', type=float, default=0.075,
                     help='Standard deviation of the Gaussian prior.')
-parser.add_argument('--kfac', type=int, default=7,
+parser.add_argument('--kfac', type=int, default=1,
                     help='Number of facets (macro concepts).')
 parser.add_argument('--dfac', type=int, default=100,
                     help='Dimension of each facet.')
@@ -57,7 +57,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda:0" if args.cuda else "cpu")
+device = torch.device("cuda:2" if args.cuda else "cpu")
 
 logging.basicConfig(filename='train_logs',
                     filemode='a',
@@ -85,7 +85,7 @@ total_anneal_steps = 5 * num_batches
 # Build the model
 ###############################################################################
 
-p_dims = [args.dfac, args.dfac, n_items]
+p_dims = [args.dfac, 800, n_items]
 model = models_dis.MultiVAE(p_dims, q_dims=None, dropout=args.keep, tau=args.tau,
                             std=args.std, kfac=args.kfac, nogb=args.nogb).to(device)
 
@@ -183,12 +183,12 @@ def evaluate(data_tr, data_te):
     global update_count
     e_idxlist = list(range(data_tr.shape[0]))
     e_N = data_tr.shape[0]
-    n100_list = []
+    n5_list = []
     r20_list = []
     r50_list = []
 
     n10_list, n20_list, n30_list, n40_list, n50_list, n60_list, n70_list, n80_list, n90_list = ([] for i in range(9))
-    r10_list, r30_list, r40_list, r60_list, r70_list, r80_list, r90_list, r100_list = ([] for i in range(8))
+    r10_list, r30_list, r40_list, r60_list, r70_list, r80_list, r90_list, r5_list = ([] for i in range(8))
 
     with torch.no_grad():
         for start_idx in range(0, e_N, args.batch_size):
@@ -215,11 +215,11 @@ def evaluate(data_tr, data_te):
             recon_batch = recon_batch.cpu().numpy()
             recon_batch[data.nonzero()] = -np.inf
 
-            n100 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 100)
+            n5 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 5)
             r20 = metric.Recall_at_k_batch(recon_batch, heldout_data, 20)
             r50 = metric.Recall_at_k_batch(recon_batch, heldout_data, 50)
 
-            n100_list.append(n100)
+            n5_list.append(n5)
             r20_list.append(r20)
             r50_list.append(r50)
 
@@ -250,7 +250,7 @@ def evaluate(data_tr, data_te):
             r70 = metric.Recall_at_k_batch(recon_batch, heldout_data, 70)
             r80 = metric.Recall_at_k_batch(recon_batch, heldout_data, 80)
             r90 = metric.Recall_at_k_batch(recon_batch, heldout_data, 90)
-            r100 = metric.Recall_at_k_batch(recon_batch, heldout_data, 100)
+            r5 = metric.Recall_at_k_batch(recon_batch, heldout_data, 5)
 
             r10_list.append(r10)
             r30_list.append(r30)
@@ -259,10 +259,10 @@ def evaluate(data_tr, data_te):
             r70_list.append(r70)
             r80_list.append(r80)
             r90_list.append(r90)
-            r100_list.append(r100)
+            r5_list.append(r5)
 
     total_loss /= len(range(0, e_N, args.batch_size))
-    n100_list = np.concatenate(n100_list)
+    n5_list = np.concatenate(n5_list)
     r20_list = np.concatenate(r20_list)
     r50_list = np.concatenate(r50_list)
 
@@ -283,18 +283,22 @@ def evaluate(data_tr, data_te):
     r70_list = np.concatenate(r70_list)
     r80_list = np.concatenate(r80_list)
     r90_list = np.concatenate(r90_list)
-    r100_list = np.concatenate(r100_list)
+    r5_list = np.concatenate(r5_list)
 
     return total_loss, np.mean(n10_list), np.mean(n20_list), np.mean(n30_list), np.mean(n40_list), np.mean(n50_list), \
-           np.mean(n60_list), np.mean(n70_list), np.mean(n80_list), np.mean(n90_list), np.mean(n100_list), \
+           np.mean(n60_list), np.mean(n70_list), np.mean(n80_list), np.mean(n90_list), np.mean(n5_list), \
            np.mean(r10_list), np.mean(r20_list), np.mean(r30_list), np.mean(r40_list), np.mean(r50_list), \
-           np.mean(r60_list), np.mean(r70_list), np.mean(r80_list), np.mean(r90_list), np.mean(r100_list),
+           np.mean(r60_list), np.mean(r70_list), np.mean(r80_list), np.mean(r90_list), np.mean(r5_list),
 
 
 best_n20 = -np.inf
 best_n50 = -np.inf
 best_r20 = -np.inf
 best_r50 = -np.inf
+best_n5 = -np.inf
+best_n10 = -np.inf
+best_r5 = -np.inf
+best_r10 = -np.inf
 best_val = -np.inf
 update_count = 0
 
@@ -306,14 +310,13 @@ try:
         train()
         # evaluate
         # val_loss, n100, r20, r50 = evaluate(vad_data_tr, vad_data_te)
-        val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n100, \
-        r10, r20, r30, r40, r50, r60, r70, r80, r90, r100 = evaluate(vad_data_tr, vad_data_te)
+        val_loss, n10, n20, n30, n40, n50, n60, n70, n80, n90, n5, \
+        r10, r20, r30, r40, r50, r60, r70, r80, r90, r5 = evaluate(vad_data_tr, vad_data_te)
 
         print('-' * 89)
-        print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
-                'n20 {:5.3f} | n50 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
-                    epoch, time.time() - epoch_start_time, val_loss,
-                    n20, n50, r20, r50))
+        print('|End of epoch {:3d}|val loss {:4.5f}|time: {:4.2f}s|n5 {:4.5f}|n10 {:4.5f}|n20 {:4.5f}|n50 {:4.5f}|r5 {:4.5f}|'
+              'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(epoch, val_loss, time.time() - epoch_start_time,
+                                                           n5, n10, n20, n50, r5, r10, r20, r50))
         print('-' * 89)
 
         n_iter = epoch * len(range(0, N, args.batch_size))
@@ -333,6 +336,11 @@ try:
             best_r20 = r20
             best_r50 = r50
             best_val = val_loss
+
+            best_n5 = n5
+            best_n10 = n10
+            best_r5 = r5
+            best_r10 = r10
 
 except KeyboardInterrupt:
     print('-' * 89)
@@ -361,6 +369,7 @@ except KeyboardInterrupt:
 #     r10, r20, r30, r40, r50, r60, r70, r80, r90, r100))
 
 print('=' * 89)
-print('| End of training | val loss {:4.5f} | n20 {:4.5f} | n50 {:4.5f} | r20 {:4.5f} | '
-        'r50 {:4.5f}'.format(best_val, best_n20, best_n50, best_r20, best_r50))
+print('|End of training|test loss {:4.5f}|n5 {:4.5f}|n10 {:4.5f}|n20 {:4.5f}|n50 {:4.5f}|r5 {:4.5f}|'
+      'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(best_val, best_n5, best_n10, best_n20, best_n50,
+                                                   best_r5, best_r10, best_r20, best_r50))
 print('=' * 89)

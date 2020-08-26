@@ -170,15 +170,15 @@ def train():
         optimizer.zero_grad()
 
         # recon_batch, mu, logvar, recon_title = model(data_tensor, title_tensor)
-        recon_batch_1, mu_1, logvar_1, recon_title_1 = model(data_tensor, title_tensor)
-        recon_batch_2, mu_2, logvar_2, _ = model(data_tensor, None)
-        _, mu_3, logvar_3, recon_title_3 = model(None, title_tensor)
+        recon_batch_1, logvar_1, recon_title_1 = model(data_tensor, title_tensor)
+        # recon_batch_2, logvar_2, recon_title_2 = model(data_tensor, None)
+        # _, mu_3, logvar_3, recon_title_3 = model(None, title_tensor)
 
         # loss = criterion(recon_batch, data_tensor, mu, logvar, recon_title, title_tensor, anneal)
-        joint_loss = criterion(recon_batch_1, data_tensor, mu_1, logvar_1, recon_title_1, title_tensor, anneal)
-        seq_loss = criterion(recon_batch_2, data_tensor, mu_2, logvar_2, None, None, anneal)
-        title_loss = criterion(None, None, mu_3, logvar_3, recon_title_3, title_tensor, anneal)
-        loss = joint_loss + seq_loss + title_loss
+        joint_loss = criterion(recon_batch_1, data_tensor, logvar_1, recon_title_1, title_tensor, anneal)
+        # seq_loss = criterion(recon_batch_2, data_tensor, logvar_2, None, None, anneal)
+        # title_loss = criterion(None, None, mu_3, logvar_3, recon_title_3, title_tensor, anneal)
+        loss = joint_loss
 
         loss.backward()
         train_loss += loss.item()
@@ -249,20 +249,20 @@ def evaluate(data_tr, data_te):
                 anneal = args.anneal_cap
 
             # recon_batch, mu, logvar, recon_title = model(data_tensor, title_tensor)
-            recon_batch_1, mu_1, logvar_1, recon_title_1 = model(data_tensor, title_tensor)
-            recon_batch_2, mu_2, logvar_2, _ = model(data_tensor, None)
-            _, mu_3, logvar_3, recon_title_3 = model(None, title_tensor)
+            recon_batch_1, logvar_1, recon_title_1 = model(data_tensor, title_tensor)
+            # recon_batch_2, logvar_2, recon_title_2 = model(data_tensor, None)
+            # _, mu_3, logvar_3, recon_title_3 = model(None, title_tensor)
 
             # loss = criterion(recon_batch, data_tensor, mu, logvar, recon_title, title_tensor, anneal)
-            joint_loss = criterion(recon_batch_1, data_tensor, mu_1, logvar_1, recon_title_1, title_tensor, anneal)
-            seq_loss = criterion(recon_batch_2, data_tensor, mu_2, logvar_2, None, None, anneal)
-            title_loss = criterion(None, None, mu_3, logvar_3, recon_title_3, title_tensor, anneal)
-            loss = joint_loss + seq_loss + title_loss
+            joint_loss = criterion(recon_batch_1, data_tensor, logvar_1, recon_title_1, title_tensor, anneal)
+            # seq_loss = criterion(recon_batch_2, data_tensor, logvar_2, None, None, anneal)
+            # title_loss = criterion(None, None, mu_3, logvar_3, recon_title_3, title_tensor, anneal)
+            loss = joint_loss
             total_loss += loss.item()
 
             # Exclude examples from training set
-            recon_batch = 0.5*(recon_batch_1 + recon_batch_2)
-            recon_batch = recon_batch.cpu().numpy()
+            # recon_batch = 0.5*(recon_batch_1 + recon_batch_2)
+            recon_batch = recon_batch_1.cpu().numpy()
             recon_batch[data.nonzero()] = -np.inf
 
             n20 = metric.NDCG_binary_at_k_batch(recon_batch, heldout_data, 20)

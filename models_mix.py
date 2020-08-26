@@ -32,7 +32,7 @@ class MultiVAE(nn.Module):
                                        d_in, d_out in zip(self.p_dims[:-1], self.p_dims[1:])])
 
         # title
-        self.hidden_dim = 100
+        self.hidden_dim = p_dims[0]
         self.t_dims = [vocab_size, self.hidden_dim, self.hidden_dim]
         self.t_d_dims = self.t_dims[::-1]
         temp_t_dims = self.t_dims[:-1] + [self.t_dims[-1] * 2]  # same as q_dims but last element *2

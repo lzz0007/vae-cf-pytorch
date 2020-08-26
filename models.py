@@ -97,11 +97,11 @@ class MultiVAE(nn.Module):
         # lstm encoding for item
         self.word_embeds = nn.Embedding(tot_items, self.hidden_dim)
 
-        # # direct concatenate
-        # self.a_dims = [max_item*300+tot_items] + self.q_dims[1:]
-        # temp_a_dims = [self.a_dims[0]] + [self.q_dims[1]] + [self.q_dims[-1] * 2]
-        # self.a_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
-        #     d_in, d_out in zip(temp_a_dims[:-1], temp_a_dims[1:])])
+        # direct concatenate
+        self.a_dims = [max_item*300+tot_items] + self.q_dims[1:]
+        temp_a_dims = [self.a_dims[0]] + [self.q_dims[1]] + [self.q_dims[-1] * 2]
+        self.a_layers = nn.ModuleList([nn.Linear(d_in, d_out) for
+            d_in, d_out in zip(temp_a_dims[:-1], temp_a_dims[1:])])
 
         # decode title
         self.t_d_dims = self.p_dims[:-1] + [vocab_size*80]
@@ -132,21 +132,21 @@ class MultiVAE(nn.Module):
         concat_embeds = torch.cat((embeds, chars_embeds), 1)  # itemx300
         concat_embeds = self.drop(concat_embeds)  # itemx300
 
-        mu_t, logvar_t = self.encode_title(concat_embeds.view(1, -1))
+        # mu_t, logvar_t = self.encode_title(concat_embeds.view(1, -1))
+        #
+        # # seq input
+        # mu_s, logvar_s = self.encode(input)
 
-        # seq input
-        mu_s, logvar_s = self.encode(input)
+        # # POE
+        # mu = torch.cat((mu_t, mu_s), dim=0)  # 2x100
+        # logvar = torch.cat((logvar_t, logvar_s), dim=0)  # 2x100
+        # mu, logvar = self.experts(mu, logvar)
+        # mu = mu.unsqueeze(0)
+        # logvar = logvar.unsqueeze(0)
 
-        # POE
-        mu = torch.cat((mu_t, mu_s), dim=0)  # 2x100
-        logvar = torch.cat((logvar_t, logvar_s), dim=0)  # 2x100
-        mu, logvar = self.experts(mu, logvar)
-        mu = mu.unsqueeze(0)
-        logvar = logvar.unsqueeze(0)
-
-        # # direct concatenate
-        # combined = torch.cat((input, concat_embeds.view(1, -1)), dim=1)
-        # mu, logvar = self.encode_all(combined)
+        # direct concatenate
+        combined = torch.cat((input, concat_embeds.view(1, -1)), dim=1)
+        mu, logvar = self.encode_all(combined)
 
         # hidden emb
         z = self.reparameterize(mu, logvar)
@@ -179,18 +179,18 @@ class MultiVAE(nn.Module):
                 logvar = h[:, self.t_dims[-1]:]
         return mu, logvar
 
-    # def encode_all(self, input):
-    #     h = F.normalize(input)
-    #     h = self.drop(h)
-    #
-    #     for i, layer in enumerate(self.a_layers):
-    #         h = layer(h)
-    #         if i != len(self.a_layers) - 1:
-    #             h = torch.tanh(h)
-    #         else:  # for last layer
-    #             mu = h[:, :self.a_dims[-1]]
-    #             logvar = h[:, self.a_dims[-1]:]
-    #     return mu, logvar
+    def encode_all(self, input):
+        h = F.normalize(input)
+        h = self.drop(h)
+
+        for i, layer in enumerate(self.a_layers):
+            h = layer(h)
+            if i != len(self.a_layers) - 1:
+                h = torch.tanh(h)
+            else:  # for last layer
+                mu = h[:, :self.a_dims[-1]]
+                logvar = h[:, self.a_dims[-1]:]
+        return mu, logvar
 
     def reparameterize(self, mu, logvar):
         if self.training:
@@ -250,16 +250,16 @@ class MultiVAE(nn.Module):
             # Normal Initialization for Biases
             layer.bias.data.normal_(0.0, 0.001)
 
-        # for layer in self.a_layers:
-        #     # Xavier Initialization for weights
-        #     size = layer.weight.size()
-        #     fan_out = size[0]
-        #     fan_in = size[1]
-        #     std = np.sqrt(2.0/(fan_in + fan_out))
-        #     layer.weight.data.normal_(0.0, std)
-        #
-        #     # Normal Initialization for Biases
-        #     layer.bias.data.normal_(0.0, 0.001)
+        for layer in self.a_layers:
+            # Xavier Initialization for weights
+            size = layer.weight.size()
+            fan_out = size[0]
+            fan_in = size[1]
+            std = np.sqrt(2.0/(fan_in + fan_out))
+            layer.weight.data.normal_(0.0, std)
+
+            # Normal Initialization for Biases
+            layer.bias.data.normal_(0.0, 0.001)
 
     def init_embedding(self, input_embedding):
         """

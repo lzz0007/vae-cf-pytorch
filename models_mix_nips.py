@@ -13,7 +13,7 @@ class MultiVAE(nn.Module):
     https://arxiv.org/abs/1802.05814
     """
 
-    def __init__(self, vocab_size, p_dims, q_dims=None, dropout=0.5, std=0.075, tau=0.1, kfac=1):
+    def __init__(self, vocab_size, p_dims, q_dims=None, dropout=0.5, std=0.075, tau=0.1):
         super(MultiVAE, self).__init__()
         self.p_dims = p_dims
         if q_dims:
@@ -32,7 +32,7 @@ class MultiVAE(nn.Module):
         #                                d_in, d_out in zip(self.p_dims[:-1], self.p_dims[1:])])
 
         dfac = self.q_dims[-1]
-        self.kfac = kfac
+
         num_items = self.q_dims[0]
         self.items = nn.Parameter(torch.empty(num_items, dfac))
         nn.init.xavier_normal_(self.items.data)
@@ -46,7 +46,7 @@ class MultiVAE(nn.Module):
                                        d_in, d_out in zip(temp_a_layers[:-1], temp_a_layers[1:])])
 
         # title
-        self.hidden_dim = 100
+        self.hidden_dim = p_dims[0]
         self.t_dims = [vocab_size, self.hidden_dim, self.hidden_dim]
         self.t_d_dims = self.t_dims[::-1]
         temp_t_dims = self.t_dims[:-1] + [self.t_dims[-1] * 2]  # same as q_dims but last element *2
@@ -89,7 +89,7 @@ class MultiVAE(nn.Module):
             items = F.normalize(self.items)
             logits = torch.mm(F.normalize(z), items.t()) / self.tau
 
-        return logits, mu, logvar, logits_title
+        return logits, mu, logvar, (logits_title if title is not None else None)
 
     def encode(self, input):
         h = F.normalize(input)

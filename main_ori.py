@@ -12,7 +12,7 @@ import dataloader
 import metric
 import copy
 import logging
-from tqdm import tqdm
+# from tqdm import tqdm
 # from ray import tune
 
 parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
@@ -49,8 +49,8 @@ args = parser.parse_args()
 
 # parameters = {'lr': [0.001, 0.01, 0.1], 'wd': [0.001, 0.01, 0.1], 'batch_size': [100, 500, 1000],
 #               'dfac1': [100, 400, 800], 'dfac2': [100, 400, 800], 'drop': [0, 0.4, 0.6, 0.8]}
-parameters = {'lr': [0.1], 'wd': [0.01, 0.1], 'batch_size': [100],
-              'dfac1': [100], 'dfac2': [100], 'drop': [0.5]}
+parameters = {'lr': [0.001], 'wd': [0.001], 'batch_size': [300, 500],
+              'dfac1': [800], 'dfac2': [800], 'drop': [0.5]}
 
 # Set the random seed manually for reproductibility.
 torch.manual_seed(args.seed)
@@ -58,7 +58,7 @@ if torch.cuda.is_available():
     if not args.cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(filename=args.save, filemode='a', format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S', level=logging.DEBUG)
@@ -253,6 +253,15 @@ if __name__ == '__main__':
                             update_count = 0
                             num_batches = int(np.ceil(float(N) / batch_size))
                             total_anneal_steps = 5 * num_batches
+
+                            best_n5 = -np.inf
+                            best_n10 = -np.inf
+                            best_n20 = -np.inf
+                            best_n50 = -np.inf
+                            best_r5 = -np.inf
+                            best_r10 = -np.inf
+                            best_r20 = -np.inf
+                            best_val = -np.inf
                             ###############################################################################
                             # Build the model
                             ###############################################################################
@@ -271,25 +280,25 @@ if __name__ == '__main__':
                             #     '|lr: {:4.5f}|wd: {:4.5f}|batch size: {:d}|dfac1: {:d}|dfac2: {:d}|drop: {:4.2f}'.
                             #     format(lr, wd, batch_size, dfac1, dfac2, drop))
                             # logger.info('=' * 89)
-                            for epoch in tqdm(range(1, args.epochs + 1)):
+                            for epoch in range(1, args.epochs + 1):
                                 epoch_start_time = time.time()
                                 # train
                                 train()
                                 # evaluate
                                 val_loss, n5, n10, n20, n50, r5, r10, r20, r50 = evaluate(vad_data_tr, vad_data_te)
                                 # logger.info(epoch)
-                                # logger.info('-' * 89)
-                                # logger.info('|end of epoch {:3d}|time: {:4.2f}s|valid loss {:4.2f}|n5 {:5.5f}|n10 {:5.5f}|n20 {:5.5f}|'
-                                #             'n50 {:5.5f}|r5 {:5.5f}|r10 {:5.5f}|r20 {:5.5f}|r50 {:5.5f}'.format(
-                                #             epoch, time.time() - epoch_start_time, val_loss, n5, n10, n20, n50, r5, r10, r20, r50))
+                                logger.info('-' * 89)
+                                logger.info('|end of epoch {:3d}|time: {:4.2f}s|valid loss {:4.2f}|n5 {:5.5f}|n10 {:5.5f}|n20 {:5.5f}|'
+                                            'n50 {:5.5f}|r5 {:5.5f}|r10 {:5.5f}|r20 {:5.5f}|r50 {:5.5f}'.format(
+                                            epoch, time.time() - epoch_start_time, val_loss, n5, n10, n20, n50, r5, r10, r20, r50))
                                 # logger.info('-' * 89)
                                 # print('-' * 89)
-                                # print(
-                                #     '|end of epoch {:3d}|time: {:4.2f}s|valid loss {:4.2f}|n5 {:5.5f}|n10 {:5.5f}|n20 {:5.5f}|'
-                                #     'n50 {:5.5f}|r5 {:5.5f}|r10 {:5.5f}|r20 {:5.5f}|r50 {:5.5f}'.format(
-                                #         epoch, time.time() - epoch_start_time, val_loss, n5, n10, n20, n50, r5, r10,
-                                #         r20, r50))
-                                # print('-' * 89)
+                                print(
+                                    '|end of epoch {:3d}|time: {:4.2f}s|valid loss {:4.2f}|n5 {:5.5f}|n10 {:5.5f}|n20 {:5.5f}|'
+                                    'n50 {:5.5f}|r5 {:5.5f}|r10 {:5.5f}|r20 {:5.5f}|r50 {:5.5f}'.format(
+                                        epoch, time.time() - epoch_start_time, val_loss, n5, n10, n20, n50, r5, r10,
+                                        r20, r50))
+                                print('-' * 89)
 
                                 n_iter = epoch * len(range(0, N, batch_size))
                                 writer.add_scalars('data/loss', {'valid': val_loss}, n_iter)
@@ -311,29 +320,40 @@ if __name__ == '__main__':
                                     best_params['drop'] = drop
                                     best_params['best_epoch'] = epoch
 
+                                    best_n20 = n20
+                                    best_n50 = n50
+                                    best_r20 = r20
+                                    best_r50 = r50
+                                    best_val = val_loss
+
+                                    best_n5 = n5
+                                    best_n10 = n10
+                                    best_r5 = r5
+                                    best_r10 = r10
+
                             # Load the best saved model.
                             # with open(args.save, 'rb') as f:
                             #     model = torch.load(f)
-                            model = copy.deepcopy(best_model)
+                            # model = copy.deepcopy(best_model)
                             # parameter settings
                             print('=' * 89)
-                            print('|lr: {:4.5f}|wd: {:4.5f}|batch size: {:3d}|dfac1: {:3d}|dfac2: {:3d}|drop: {:4.2f}|epoch: {:4.2f}'.
-                                  format(best_params['lr'], best_params['wd'], best_params['batch_size'],
-                                         best_params['dfac1'], best_params['dfac2'], best_params['drop'], best_params['best_epoch']))
+                            print(best_params)
                             # print('=' * 89)
                             # Run on test data.
-                            test_loss, n5, n10, n20, n50, r5, r10, r20, r50 = evaluate(vad_data_tr, vad_data_te)
+                            # test_loss, n5, n10, n20, n50, r5, r10, r20, r50 = evaluate(vad_data_tr, vad_data_te)
                             # print('=' * 89)
                             print('|End of training|test loss {:4.5f}|n5 {:4.5f}|n10 {:4.5f}|n20 {:4.5f}|n50 {:4.5f}|r5 {:4.5f}|'
-                                'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(test_loss, n5, n10, n20, n50, r5, r10, r20, r50))
+                                'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(best_val, best_n5, best_n10, best_n20,
+                                                                                 best_n50, best_r5, best_r10, best_r20,
+                                                                                 best_r50))
                             # print('=' * 89)
 
                             logger.info('=' * 89)
-                            logger.info('|lr: {:4.5f}|wd: {:4.5f}|batch size: {:5f}|dfac1: {:5f}|dfac2: {:5f}|drop: {:4.2f}|epoch: {:4.2f}'.
-                                        format(best_params['lr'], best_params['wd'], best_params['batch_size'], best_params['dfac1'],
-                                        best_params['dfac2'], best_params['drop'], best_params['best_epoch']))
+                            logger.info(best_params)
                             # logger.info('=' * 89)
                             # logger.info('=' * 89)
                             logger.info('|End of training|test loss {:4.5f}|n5 {:4.5f}|n10 {:4.5f}|n20 {:4.5f}|n50 {:4.5f}|r5 {:4.5f}|'
-                                  'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(test_loss, n5, n10, n20, n50, r5, r10, r20, r50))
+                                  'r10 {:4.5f}|r20 {:4.5f}|r50 {:4.5f}'.format(best_val, best_n5, best_n10, best_n20,
+                                                                                 best_n50, best_r5, best_r10, best_r20,
+                                                                                 best_r50))
                             # logger.info('=' * 89)
